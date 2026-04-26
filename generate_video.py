@@ -34,49 +34,55 @@ _img_total = 0
 # MÜZİK KATEGORİ HARİTASI
 # FreePD.com — CC0 (tamamen ücretsiz, telif hakkı yok, YouTube'da sorun çıkmaz)
 # ═══════════════════════════════════════════════════════════════════════════════
+GITHUB_RAW = "https://raw.githubusercontent.com/taklaciguvercinn/video-bot/main"
+
 MUSIC_MAP = {
-    # Savaş / Viking / Orta Çağ
-    "viking":        ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
-    "savaş":         ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
-    "orta çağ":      ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
-    "şövalye":       ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
-    "roma":          ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
-    "osmanlı":       ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
-    "selçuklu":      ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
-    # Antik / Mısır / Yunan
-    "mısır":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
-    "antik":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
-    "yunan":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
-    "sümer":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
-    "mezopotamya":   ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
-    "aztek":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
-    "maya":          ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
-    # Uzay / Bilim / Teknoloji / AI
-    "uzay":          ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
-    "yapay zeka":    ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
-    "teknoloji":     ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
-    "bilim":         ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
-    "robot":         ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
-    "gelecek":       ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
+    # Savaş / Viking / Osmanlı / Roma
+    "viking":      ("epic_battle", f"{GITHUB_RAW}/nastelbom-epic-501714.mp3"),
+    "savaş":       ("epic_battle", f"{GITHUB_RAW}/nastelbom-epic-501714.mp3"),
+    "osmanlı":     ("epic_battle", f"{GITHUB_RAW}/nastelbom-epic-501714.mp3"),
+    "selçuklu":    ("epic_battle", f"{GITHUB_RAW}/nastelbom-epic-501714.mp3"),
+    "roma":        ("epic_battle", f"{GITHUB_RAW}/nastelbom-epic-501714.mp3"),
+    "şövalye":     ("epic_battle", f"{GITHUB_RAW}/nastelbom-epic-501714.mp3"),
+    "orta çağ":    ("epic_battle", f"{GITHUB_RAW}/nastelbom-epic-501714.mp3"),
+    "savaşçı":     ("epic_battle", f"{GITHUB_RAW}/nastelbom-epic-501714.mp3"),
+    # Antik / Mısır / Yunan / Sümer
+    "mısır":       ("ancient",     f"{GITHUB_RAW}/onetent-ancient-181070.mp3"),
+    "antik":       ("ancient",     f"{GITHUB_RAW}/onetent-ancient-181070.mp3"),
+    "yunan":       ("ancient",     f"{GITHUB_RAW}/onetent-ancient-181070.mp3"),
+    "sümer":       ("ancient",     f"{GITHUB_RAW}/onetent-ancient-181070.mp3"),
+    "mezopotamya": ("ancient",     f"{GITHUB_RAW}/onetent-ancient-181070.mp3"),
+    "aztek":       ("ancient",     f"{GITHUB_RAW}/onetent-ancient-181070.mp3"),
+    "maya":        ("ancient",     f"{GITHUB_RAW}/onetent-ancient-181070.mp3"),
+    "firavun":     ("ancient",     f"{GITHUB_RAW}/onetent-ancient-181070.mp3"),
+    # Uzay / Teknoloji / Yapay Zeka
+    "uzay":        ("space",       f"{GITHUB_RAW}/the_mountain-space-438391.mp3"),
+    "yapay zeka":  ("space",       f"{GITHUB_RAW}/the_mountain-space-438391.mp3"),
+    "teknoloji":   ("space",       f"{GITHUB_RAW}/the_mountain-space-438391.mp3"),
+    "bilim":       ("space",       f"{GITHUB_RAW}/the_mountain-space-438391.mp3"),
+    "robot":       ("space",       f"{GITHUB_RAW}/the_mountain-space-438391.mp3"),
+    "evren":       ("space",       f"{GITHUB_RAW}/the_mountain-space-438391.mp3"),
+    "gelecek":     ("space",       f"{GITHUB_RAW}/the_mountain-space-438391.mp3"),
     # Doğa / Hayvanlar
-    "doğa":          ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
-    "hayvan":        ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
-    "okyannus":      ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
-    "deniz":         ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
-    "orman":         ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
-    # Gizemli / Korku / Mitoloji
-    "gizem":         ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
-    "korku":         ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
-    "mitoloji":      ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
-    "paranormal":    ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
-    "illuminati":    ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
-    "komplo":        ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
-    # İlham / Motivasyon
-    "motivasyon":    ("inspiring",      "https://freepd.com/music/Inspired.mp3"),
-    "başarı":        ("inspiring",      "https://freepd.com/music/Inspired.mp3"),
-    "liderlik":      ("inspiring",      "https://freepd.com/music/Inspired.mp3"),
+    "doğa":        ("nature",      f"{GITHUB_RAW}/sonican-background-music-new-age-nature-465069.mp3"),
+    "hayvan":      ("nature",      f"{GITHUB_RAW}/sonican-background-music-new-age-nature-465069.mp3"),
+    "deniz":       ("nature",      f"{GITHUB_RAW}/sonican-background-music-new-age-nature-465069.mp3"),
+    "orman":       ("nature",      f"{GITHUB_RAW}/sonican-background-music-new-age-nature-465069.mp3"),
+    "okyanus":     ("nature",      f"{GITHUB_RAW}/sonican-background-music-new-age-nature-465069.mp3"),
+    # Gizem / Korku / Mitoloji
+    "gizem":       ("mystery",     f"{GITHUB_RAW}/studiokolomna-risk-136788.mp3"),
+    "korku":       ("mystery",     f"{GITHUB_RAW}/studiokolomna-risk-136788.mp3"),
+    "mitoloji":    ("mystery",     f"{GITHUB_RAW}/studiokolomna-risk-136788.mp3"),
+    "paranormal":  ("mystery",     f"{GITHUB_RAW}/studiokolomna-risk-136788.mp3"),
+    "komplo":      ("mystery",     f"{GITHUB_RAW}/studiokolomna-risk-136788.mp3"),
+    "gizemli":     ("mystery",     f"{GITHUB_RAW}/studiokolomna-risk-136788.mp3"),
+    # Motivasyon / İlham / Ambient
+    "motivasyon":  ("inspiring",   f"{GITHUB_RAW}/atlasaudio-ambient-soundscapes-511893.mp3"),
+    "başarı":      ("inspiring",   f"{GITHUB_RAW}/atlasaudio-ambient-soundscapes-511893.mp3"),
+    "liderlik":    ("inspiring",   f"{GITHUB_RAW}/atlasaudio-ambient-soundscapes-511893.mp3"),
+    "ilham":       ("inspiring",   f"{GITHUB_RAW}/atlasaudio-ambient-soundscapes-511893.mp3"),
 }
-DEFAULT_MUSIC = ("cinematic", "https://freepd.com/music/Thinking%20Music.mp3")
+DEFAULT_MUSIC = ("cinematic", f"{GITHUB_RAW}/atlasaudio-ambient-soundscapes-511893.mp3")
 
 def get_music_for_topic(topic: str) -> tuple:
     """Konuya göre müzik seç"""
@@ -365,46 +371,56 @@ def generate_thumbnail(prompt: str, text: str, bg_color: str, topic: str) -> str
 # SES — DERİN BELGESEL SESİ
 # ═══════════════════════════════════════════════════════════════════════════════
 def generate_audio(script: str) -> tuple:
-    """Derin belgesel sesi: pitch -15Hz, rate -5%, EQ işlemi"""
+    """Derin belgesel sesi — EQ ile bas güçlendirilmiş"""
     tg("Derin belgesel sesi sentezleniyor...", "🎙")
     script_f  = WORK / "script.txt"
     raw_f     = WORK / "narration_raw.mp3"
     final_f   = WORK / "narration.mp3"
     script_f.write_text(script, encoding="utf-8")
 
-    # Edge TTS — Ahmet sesi, daha yavaş ve derin
+    # edge-tts: parametreler ayrı ayrı string olmalı, boşluk olmamalı
     r = subprocess.run([
         "edge-tts",
         "--voice", "tr-TR-AhmetNeural",
         "--file",  str(script_f),
         "--write-media", str(raw_f),
-        "--rate",  "-5%",        # Biraz yavaş → daha ağırbaşlı
-        "--pitch", "-15Hz",      # Daha derin ses tonu
-        "--volume", "+10%",      # Biraz daha güçlü
+        "--rate",   "-8%",
+        "--pitch",  "-10Hz",
+        "--volume", "+15%",
     ], capture_output=True, text=True)
 
     if r.returncode != 0 or not raw_f.exists():
-        raise Exception(f"TTS hatası: {r.stderr[-400:]}")
+        # Yedek: parametresiz dene
+        tg("Ses parametreleri başarısız, sade sesle deneniyor...", "⚠")
+        r2 = subprocess.run([
+            "edge-tts",
+            "--voice", "tr-TR-AhmetNeural",
+            "--file",  str(script_f),
+            "--write-media", str(raw_f),
+        ], capture_output=True, text=True)
+        if r2.returncode != 0 or not raw_f.exists():
+            raise Exception(f"TTS hatası: {r2.stderr[-400:]}")
 
-    # FFmpeg ile EQ: bas frekansları artır, tiz frekansları azalt → belgesel tonu
+    # FFmpeg EQ: belgesel tonu — bas güçlendir, tiz azalt
     eq_cmd = [
         "ffmpeg", "-y", "-i", str(raw_f),
         "-af",
-        "equalizer=f=80:width_type=o:width=2:g=4,"    # 80Hz bas güçlendir
-        "equalizer=f=200:width_type=o:width=2:g=2,"   # 200Hz güçlendir
-        "equalizer=f=3000:width_type=o:width=2:g=-2," # 3kHz tizi azalt
-        "equalizer=f=8000:width_type=o:width=2:g=-3," # 8kHz sibilansı azalt
-        "acompressor=threshold=-18dB:ratio=3:attack=5:release=50," # Compressor
-        "volume=1.2",                                   # Genel ses seviyesi
+        (
+            "equalizer=f=80:width_type=o:width=2:g=5,"
+            "equalizer=f=180:width_type=o:width=2:g=3,"
+            "equalizer=f=3000:width_type=o:width=2:g=-2,"
+            "equalizer=f=8000:width_type=o:width=2:g=-4,"
+            "acompressor=threshold=-16dB:ratio=3:attack=5:release=60,"
+            "volume=1.3"
+        ),
         "-c:a", "mp3", "-b:a", "192k",
         str(final_f)
     ]
     eq_r = subprocess.run(eq_cmd, capture_output=True, text=True)
-    if eq_r.returncode != 0:
-        # EQ başarısız, ham sesi kullan
+    if eq_r.returncode != 0 or not final_f.exists():
         subprocess.run(["cp", str(raw_f), str(final_f)])
+        tg("EQ atlandı, ham ses kullanıldı", "⚠")
 
-    # Süreyi al
     probe = subprocess.run([
         "ffprobe","-v","quiet","-print_format","json",
         "-show_format", str(final_f)
