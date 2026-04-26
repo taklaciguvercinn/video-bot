@@ -82,7 +82,7 @@ def gemini(prompt: str) -> str:
     """Gemini 1.5 Flash ile metin üret — tamamen ücretsiz"""
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
-        f"gemini-2.5-flash-preview-04-17:generateContent?key={GEMINI_API_KEY}"
+        f"gemini-2.5-flash-preview-05-20:generateContent?key={GEMINI_API_KEY}"
     )
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
