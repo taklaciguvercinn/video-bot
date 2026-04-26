@@ -197,46 +197,42 @@ def research_and_script(topic: str, duration: int, img_count: int) -> dict:
     tg(f"<b>'{topic}'</b> araştırılıyor ve senaryo yazılıyor...", "📚")
     words = duration * 160
 
-    prompt = f"""Sen profesyonel bir YouTube belgesel içerik uzmanısın.
-'{topic}' konusunda {duration} dakikalık Türkçe belgesel tarzı video hazırla.
+    prompt = f"""Sen profesyonel bir YouTube belgesel senaristisin.
+'{topic}' konusunda {duration} dakikalık Türkçe belgesel video hazırla.
 
-GÖREVLER:
-1. Konuyu kapsamlı araştır, gerçek ve doğru bilgiler kullan
-2. Tam {words} kelimelik akıcı, merak uyandıran Türkçe senaryo yaz
-3. Tam {img_count} adet görsel için ayrı ayrı İngilizce sinematik prompt yaz
-4. YouTube SEO optimizasyonu yap
-5. Thumbnail tasarımı öner
+KRİTİK KURAL: Senaryo SADECE izleyiciye seslendirilecek metni içermeli.
+Senaryo içinde ASLA şunlar olmamalı:
+- Görsel açıklamaları (örn: "Görsel 1:", "[Görüntü:", "Resim:")
+- Müzik isimleri veya ses yönergeleri
+- Teknik notlar veya parantez içi açıklamalar
+- İngilizce kelimeler veya komutlar
 
-JSON formatında yanıt ver:
+Senaryo düz, akıcı, belgesel anlatımı olmalı. Sanki National Geographic anlatıcısı gibi.
+
+JSON formatında yanıt ver (başka hiçbir şey yazma):
 {{
-  "seo_title": "Başlık (60 karakter max, emoji ile)",
-  "seo_description": "YouTube açıklaması (500 karakter, #hashtag ile bitir)",
+  "seo_title": "YouTube başlığı (60 karakter max, Türkçe, emoji ile)",
+  "seo_description": "YouTube açıklaması (500 karakter, Türkçe, #hashtag ile bitir)",
   "seo_tags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10"],
-  "script": "Tam senaryo metni buraya...",
-  "image_prompts": ["prompt1 cinematic dramatic 8k","prompt2 cinematic dramatic 8k"],
-  "thumbnail_text": "MAX 4 KELIME",
-  "thumbnail_prompt": "epik thumbnail görseli ingilizce, no text, dramatic lighting",
+  "script": "Buraya SADECE seslendirilecek Türkçe metin. Hiçbir görsel yönergesi, müzik notu veya teknik bilgi içermemeli. Tam {words} kelime olmalı.",
+  "image_prompts": ["sinematik ingilizce prompt 1, dramatic lighting, 8k","sinematik ingilizce prompt 2, dramatic lighting, 8k"],
+  "thumbnail_text": "MAX 4 TÜRKÇE KELİME",
+  "thumbnail_prompt": "epik sahne ingilizce, no text, dramatic lighting, cinematic",
   "thumbnail_bg_color": "#1a1a2e"
 }}"""
 
     for attempt in range(3):
         try:
             raw = gemini(prompt)
-            # Tüm olası temizleme
             raw = re.sub(r"```json\s*|```\s*", "", raw).strip()
-            
-            # JSON bloğunu bul — { ile başlayan ilk geçerli bloğu al
-            # Bazen Gemini önüne metin ekliyor
+
             json_str = None
-            
-            # Yöntem 1: Direkt parse dene
             try:
                 data = json.loads(raw)
                 json_str = raw
             except:
                 pass
-            
-            # Yöntem 2: İlk { ile son } arasını al
+
             if not json_str:
                 start = raw.find("{")
                 end   = raw.rfind("}") + 1
@@ -247,10 +243,9 @@ JSON formatında yanıt ver:
                         json_str = candidate
                     except:
                         pass
-            
-            # Yöntem 3: Regex ile JSON bloğunu bul
+
             if not json_str:
-                matches = re.findall(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', raw, re.DOTALL)
+                matches = re.findall(r'\{.*?\}', raw, re.DOTALL)
                 for m in matches:
                     try:
                         data = json.loads(m)
@@ -259,18 +254,26 @@ JSON formatında yanıt ver:
                             break
                     except:
                         continue
-            
-            if not json_str:
-                raise Exception(f"JSON bulunamadı, ham yanıt: {raw[:200]}")
 
-            # Zorunlu alanları kontrol et
+            if not json_str:
+                raise Exception(f"JSON bulunamadı: {raw[:150]}")
+
             for field in ["seo_title", "script", "image_prompts"]:
                 if field not in data or not data[field]:
                     raise Exception(f"Eksik alan: {field}")
 
-            # image_prompts sayısını tamamla
+            # Senaryoyu temizle — görsel/müzik yönergelerini kaldır
+            script = data["script"]
+            script = re.sub(r'\[.*?\]', '', script)           # [Görüntü: ...] kaldır
+            script = re.sub(r'\(.*?\)', '', script)           # (Müzik...) kaldır
+            script = re.sub(r'Görsel\s*\d+\s*:', '', script) # "Görsel 1:" kaldır
+            script = re.sub(r'Resim\s*\d+\s*:', '', script)  # "Resim 1:" kaldır
+            script = re.sub(r'---+', '', script)              # Ayraçları kaldır
+            script = re.sub(r'\n{3,}', '\n\n', script)       # Çoklu boş satırları azalt
+            data["script"] = script.strip()
+
             while len(data["image_prompts"]) < img_count:
-                base = data["image_prompts"][-1] if data["image_prompts"] else f"{topic} cinematic"
+                base = data["image_prompts"][-1] if data["image_prompts"] else f"{topic} cinematic scene"
                 data["image_prompts"].append(f"{base} variation {len(data['image_prompts'])+1}")
 
             tg(
@@ -299,19 +302,30 @@ def download_music(topic: str) -> str:
     tg(f"Arkaplan müziği indiriliyor: <b>{music_type}</b>", "🎵")
     music_path = WORK / "background_music.mp3"
 
-    for attempt in range(3):
-        try:
-            r = requests.get(music_url, timeout=30)
-            if r.status_code == 200 and len(r.content) > 10000:
-                music_path.write_bytes(r.content)
-                tg("Müzik indirildi!", "✅")
-                return str(music_path)
-            time.sleep(5)
-        except Exception as e:
-            tg(f"Müzik indirme hatası: {e}", "⚠")
-            time.sleep(5)
+    headers = {
+        "User-Agent": "Mozilla/5.0 (compatible; VideoBot/1.0)",
+        "Accept": "audio/mpeg, audio/*, */*"
+    }
 
-    tg("Müzik indirilemedi, müziksiz devam edilecek", "⚠")
+    for attempt in range(4):
+        try:
+            r = requests.get(music_url, headers=headers, timeout=60, stream=True)
+            if r.status_code == 200:
+                content = b""
+                for chunk in r.iter_content(chunk_size=8192):
+                    content += chunk
+                if len(content) > 5000:
+                    music_path.write_bytes(content)
+                    size_kb = len(content) // 1024
+                    tg(f"Müzik indirildi! ({size_kb} KB)", "✅")
+                    return str(music_path)
+            tg(f"Müzik HTTP {r.status_code}, tekrar deneniyor ({attempt+1}/4)...", "⚠")
+            time.sleep(8)
+        except Exception as e:
+            tg(f"Müzik indirme hatası ({attempt+1}/4): {str(e)[:80]}", "⚠")
+            time.sleep(8)
+
+    tg("Müzik indirilemedi, müziksiz devam ediliyor", "⚠")
     return ""
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -509,101 +523,93 @@ def generate_audio(script: str) -> tuple:
     return str(final_f), dur
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# VİDEO MONTAJ — HER 10 SANİYEDE EFEKT
+# VİDEO MONTAJ — GÖRSEL BAŞINA ZOOM + FADE
 # ═══════════════════════════════════════════════════════════════════════════════
 def create_video(images: list, audio: str, total_duration: float) -> str:
     tg(
         f"Video montajlanıyor...\n"
-        f"🖼 {len(images)} görsel | Her 10s efekt\n"
-        f"⏳ Tahmini: ~{len(images)//3+8} dakika",
+        f"🖼 {len(images)} görsel | Zoom + Fade efektleri\n"
+        f"⏳ Tahmini: ~{len(images)//2 + 5} dakika",
         "🎬"
     )
     out   = WORK / "final_video.mp4"
     lst_f = WORK / "imglist.txt"
-
-    each   = total_duration / len(images)
-    fps    = 25
-    frames = max(int(each * fps), 50)
+    each  = total_duration / len(images)
+    fps   = 25
 
     tg(f"Toplam: {total_duration/60:.1f} dk | Görsel başına: {each:.1f}s", "⚙")
 
-    with open(lst_f, "w") as f:
-        for p in images:
-            f.write(f"file '{os.path.abspath(p)}'\n")
-            f.write(f"duration {each:.3f}\n")
-        f.write(f"file '{os.path.abspath(images[-1])}'\n")
+    # Her görseli ayrı ayrı işle (güvenilir yöntem)
+    processed = []
+    for i, img_path in enumerate(images):
+        proc = WORK / f"seg_{i:02d}.mp4"
+        d    = i % 4
 
-    # Her görsel için efekt:
-    # - Zoom pulse: her 10 saniyede hafif zoom in/out
-    # - Fade in/out geçişleri
-    # - Çift-tek yön değişimi
-    filter_parts = []
-    maps = []
+        if d == 0:   zoom, x, y = "min(zoom+0.0007,1.08)", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+        elif d == 1: zoom, x, y = "min(zoom+0.0007,1.08)", "iw/2-(iw/zoom/2)+on*0.5", "ih/2-(ih/zoom/2)"
+        elif d == 2: zoom, x, y = "if(lte(on,1),1.08,max(zoom-0.0007,1.0))", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+        else:        zoom, x, y = "min(zoom+0.0005,1.06)", "iw/2-(iw/zoom/2)-on*0.3", "ih/4-(ih/zoom/4)"
 
-    for i in range(len(images)):
-        # Zoom yönü: çift = sol→sağ, tek = sağ→sol
-        if i % 2 == 0:
-            zoom_expr = "if(lte(on,1),1.05,zoom-0.0004)"
-            x_expr    = "iw/2-(iw/zoom/2)"
-            y_expr    = "ih/2-(ih/zoom/2)"
+        fo = max(0, each - 0.7)
+        frames = max(int(each * fps), 30)
+
+        cmd = [
+            "ffmpeg", "-y",
+            "-loop", "1", "-t", str(each + 1), "-i", img_path,
+            "-vf",
+            f"scale=3840:-2,"
+            f"zoompan=z='{zoom}':x='{x}':y='{y}':d={frames}:s=1920x1080:fps={fps},"
+            f"fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5",
+            "-t", str(each),
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+            "-an", "-pix_fmt", "yuv420p",
+            str(proc)
+        ]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+        if r.returncode == 0 and proc.exists() and proc.stat().st_size > 1000:
+            processed.append(str(proc))
+            tg(f"Segment {i+1}/{len(images)} ✓", "🎬")
         else:
-            zoom_expr = "if(lte(on,1),1.0,min(zoom+0.0004,1.08))"
-            x_expr    = "iw/2-(iw/zoom/2)"
-            y_expr    = "ih/2-(ih/zoom/2)+sin(on/50)*20"
+            # Yedek: basit scale
+            cmd2 = [
+                "ffmpeg", "-y",
+                "-loop", "1", "-t", str(each), "-i", img_path,
+                "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1",
+                "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                "-an", "-pix_fmt", "yuv420p",
+                str(proc)
+            ]
+            r2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=120)
+            if r2.returncode == 0:
+                processed.append(str(proc))
+                tg(f"Segment {i+1} yedek ✓", "⚠")
+            else:
+                tg(f"Segment {i+1} atlandı!", "❌")
 
-        # Her 10 saniyede bir "pulse" efekti için brightness dalgası
-        pulse = f"eq=brightness='0.02*sin(2*PI*t/10)':contrast=1.05"
+    if not processed:
+        raise Exception("Hiçbir video segmenti oluşturulamadı!")
 
-        filter_parts.append(
-            f"[{i}:v]scale=3840:-1,"
-            f"zoompan=z='{zoom_expr}':x='{x_expr}':y='{y_expr}'"
-            f":d={frames}:s=1920x1080:fps={fps},"
-            f"{pulse},"
-            f"fade=t=in:st=0:d=0.8,"
-            f"fade=t=out:st={max(0,each-0.8):.2f}:d=0.8"
-            f"[v{i}]"
-        )
-        maps.append(f"[v{i}]")
+    # Concat listesi
+    with open(lst_f, "w") as f:
+        for p in processed:
+            f.write(f"file '{os.path.abspath(p)}'\n")
 
-    filter_parts.append(f"{''.join(maps)}concat=n={len(images)}:v=1:a=0[outv]")
-    filt = ";".join(filter_parts)
-
-    in_args = []
-    for p in images:
-        in_args += ["-loop","1","-t",str(each+2),"-i", p]
-
-    cmd = [
-        "ffmpeg","-y",
-        *in_args, "-i", audio,
-        "-filter_complex", filt,
-        "-map","[outv]",
-        "-map", f"{len(images)}:a",
-        "-c:v","libx264","-preset","fast","-crf","22",
-        "-c:a","aac","-b:a","192k",
-        "-shortest","-movflags","+faststart",
+    # Birleştir + ses ekle
+    cmd_final = [
+        "ffmpeg", "-y",
+        "-f", "concat", "-safe", "0", "-i", str(lst_f),
+        "-i", audio,
+        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-c:a", "aac", "-b:a", "192k",
+        "-shortest", "-movflags", "+faststart",
         str(out)
     ]
-    r = subprocess.run(cmd, capture_output=True, text=True)
-
+    r = subprocess.run(cmd_final, capture_output=True, text=True, timeout=900)
     if r.returncode != 0:
-        tg("Efektli versiyon başarısız → basit versiyon...", "⚠")
-        cmd2 = [
-            "ffmpeg","-y",
-            "-f","concat","-safe","0","-i",str(lst_f),
-            "-i", audio,
-            "-vf","scale=1920:1080:force_original_aspect_ratio=decrease,"
-                 "pad=1920:1080:(ow-iw)/2:(oh-ih)/2",
-            "-c:v","libx264","-preset","fast","-crf","22",
-            "-c:a","aac","-b:a","192k",
-            "-shortest","-movflags","+faststart",
-            str(out)
-        ]
-        r2 = subprocess.run(cmd2, capture_output=True, text=True)
-        if r2.returncode != 0:
-            raise Exception(f"FFmpeg: {r2.stderr[-600:]}")
+        raise Exception(f"Son birleştirme hatası: {r.stderr[-400:]}")
 
     mb = os.path.getsize(out) / 1024 / 1024
-    tg(f"Video hazır! Boyut: <b>{mb:.0f} MB</b>", "✅")
+    tg(f"Video hazır! Boyut: <b>{mb:.0f} MB</b> ✨", "✅")
     return str(out)
 
 # ═══════════════════════════════════════════════════════════════════════════════
