@@ -146,71 +146,119 @@ def gemini(prompt: str) -> str:
     )
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {"temperature": 0.8, "maxOutputTokens": 8192}
+        "generationConfig": {
+            "temperature":     0.7,
+            "maxOutputTokens": 8192,
+            "responseMimeType": "application/json"
+        }
     }
-    for attempt in range(3):
+    for attempt in range(4):
         try:
-            r = requests.post(url, json=body, timeout=120)
+            r = requests.post(url, json=body, timeout=180)
             if r.status_code == 200:
-                return r.json()["candidates"][0]["content"]["parts"][0]["text"]
+                data = r.json()
+                # Yanıtı güvenli şekilde çıkar
+                candidates = data.get("candidates", [])
+                if not candidates:
+                    raise Exception("Gemini boş candidates döndürdü")
+                content = candidates[0].get("content", {})
+                parts = content.get("parts", [])
+                if not parts:
+                    raise Exception("Gemini boş parts döndürdü")
+                text = parts[0].get("text", "").strip()
+                if not text:
+                    raise Exception("Gemini boş metin döndürdü")
+                return text
             if r.status_code == 429:
-                wait = 30 * (attempt + 1)
+                wait = 40 * (attempt + 1)
                 tg(f"Gemini rate limit, {wait}s bekleniyor...", "⏳")
                 time.sleep(wait)
                 continue
+            if r.status_code == 503:
+                tg(f"Gemini meşgul, 30s bekleniyor...", "⏳")
+                time.sleep(30)
+                continue
             raise Exception(f"Gemini {r.status_code}: {r.text[:300]}")
         except requests.Timeout:
-            time.sleep(10)
-    raise Exception("Gemini 3 denemede yanıt vermedi")
+            tg(f"Gemini timeout, tekrar deneniyor ({attempt+1}/4)...", "⏳")
+            time.sleep(15)
+        except Exception as e:
+            if "boş" in str(e):
+                tg(f"Gemini boş yanıt ({attempt+1}/4), tekrar deneniyor...", "⏳")
+                time.sleep(20)
+                continue
+            raise
+    raise Exception("Gemini 4 denemede yanıt vermedi")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # ARAŞTIRMA + SENARYO + SEO
 # ═══════════════════════════════════════════════════════════════════════════════
 def research_and_script(topic: str, duration: int, img_count: int) -> dict:
     tg(f"<b>'{topic}'</b> araştırılıyor ve senaryo yazılıyor...", "📚")
-    words = duration * 160  # 160 kelime/dakika → daha uzun video
-    raw = gemini(f"""Sen profesyonel bir YouTube belgesel içerik uzmanısın.
+    words = duration * 160
+
+    prompt = f"""Sen profesyonel bir YouTube belgesel içerik uzmanısın.
 '{topic}' konusunda {duration} dakikalık Türkçe belgesel tarzı video hazırla.
 
 GÖREVLER:
 1. Konuyu kapsamlı araştır, gerçek ve doğru bilgiler kullan
 2. Tam {words} kelimelik akıcı, merak uyandıran Türkçe senaryo yaz
-   - Giriş (dikkat çekici soru veya gerçek ile başla)
-   - Gelişme (bölümlere ayrılmış, her bölüm bir görsel ile eşleşecek)
-   - Sonuç (güçlü kapanış)
 3. Tam {img_count} adet görsel için ayrı ayrı İngilizce sinematik prompt yaz
 4. YouTube SEO optimizasyonu yap
 5. Thumbnail tasarımı öner
 
-SADECE şu JSON formatında yanıt ver, başka HİÇBİR şey yazma:
+JSON formatında yanıt ver:
 {{
-  "seo_title": "Başlık (60 karakter max, emoji ile, merak uyandıran)",
-  "seo_description": "Açıklama (500 karakter, #hashtag ile bitir)",
-  "seo_tags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10","tag11","tag12","tag13","tag14","tag15"],
-  "script": "Tam senaryo buraya — {words} kelime olmalı...",
-  "image_prompts": ["prompt 1 — cinematic, dramatic lighting, ultra detailed, 8k"],
-  "thumbnail_text": "BÜYÜK HARF MAX 4 KELİME",
-  "thumbnail_prompt": "Thumbnail için epik İngilizce görsel prompt, no text, dramatic",
+  "seo_title": "Başlık (60 karakter max, emoji ile)",
+  "seo_description": "YouTube açıklaması (500 karakter, #hashtag ile bitir)",
+  "seo_tags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10"],
+  "script": "Tam senaryo metni buraya...",
+  "image_prompts": ["prompt1 cinematic dramatic 8k","prompt2 cinematic dramatic 8k"],
+  "thumbnail_text": "MAX 4 KELIME",
+  "thumbnail_prompt": "epik thumbnail görseli ingilizce, no text, dramatic lighting",
   "thumbnail_bg_color": "#1a1a2e"
-}}""")
+}}"""
 
-    raw  = re.sub(r"```json\s*|```\s*", "", raw).strip()
-    raw  = raw[raw.find("{"):raw.rfind("}")+1]
-    data = json.loads(raw)
+    for attempt in range(3):
+        try:
+            raw = gemini(prompt)
+            # JSON temizle
+            raw = re.sub(r"```json\s*|```\s*", "", raw).strip()
+            # JSON bloğunu bul
+            start = raw.find("{")
+            end   = raw.rfind("}") + 1
+            if start == -1 or end == 0:
+                raise Exception(f"JSON bulunamadı, ham yanıt: {raw[:200]}")
+            raw = raw[start:end]
+            data = json.loads(raw)
 
-    if len(data.get("image_prompts", [])) < img_count:
-        base = data["image_prompts"][-1] if data.get("image_prompts") else f"{topic} cinematic scene"
-        while len(data["image_prompts"]) < img_count:
-            data["image_prompts"].append(base + f" variation {len(data['image_prompts'])+1}")
+            # Zorunlu alanları kontrol et
+            for field in ["seo_title", "script", "image_prompts"]:
+                if field not in data or not data[field]:
+                    raise Exception(f"Eksik alan: {field}")
 
-    tg(
-        f"✅ Senaryo hazır!\n"
-        f"📺 <b>{data['seo_title']}</b>\n"
-        f"📝 {len(data['script'].split())} kelime\n"
-        f"🖼 {len(data['image_prompts'])} görsel promptu",
-        ""
-    )
-    return data
+            # image_prompts sayısını tamamla
+            while len(data["image_prompts"]) < img_count:
+                base = data["image_prompts"][-1] if data["image_prompts"] else f"{topic} cinematic"
+                data["image_prompts"].append(f"{base} variation {len(data['image_prompts'])+1}")
+
+            tg(
+                f"✅ Senaryo hazır!\n"
+                f"📺 <b>{data['seo_title']}</b>\n"
+                f"📝 {len(data['script'].split())} kelime\n"
+                f"🖼 {len(data['image_prompts'])} görsel promptu",
+                ""
+            )
+            return data
+
+        except json.JSONDecodeError as e:
+            tg(f"JSON parse hatası ({attempt+1}/3): {str(e)[:100]}", "⚠")
+            time.sleep(15)
+        except Exception as e:
+            tg(f"Senaryo hatası ({attempt+1}/3): {str(e)[:150]}", "⚠")
+            time.sleep(15)
+
+    raise Exception("Senaryo 3 denemede üretilemedi")
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # MÜZİK İNDİR
