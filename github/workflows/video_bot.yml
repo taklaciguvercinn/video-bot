@@ -1,0 +1,72 @@
+name: 🎬 Video Bot v3
+
+on:
+  workflow_dispatch:
+    inputs:
+      command:
+        description: 'Komut: Konu,Dakika,Resim,GG.AA.YYYY,SS:DD'
+        required: true
+
+# 2 hesap dönüşümü:
+# Hesap A: ACCOUNT_SELECTOR=A olduğunda çalışır
+# Hesap B: ACCOUNT_SELECTOR=B olduğunda çalışır
+# Telegram bot hangi hesabın sırasında olduğunu takip eder.
+
+jobs:
+  generate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90   # 40 dk video + 50 resim için yeterli
+
+    steps:
+      # ── CHECKOUT ────────────────────────────────────────────────────────────
+      - name: 📥 Kodu al
+        uses: actions/checkout@v4
+
+      # ── PYTHON + BAĞIMLILIKLAR ───────────────────────────────────────────────
+      - name: 🐍 Python 3.11
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: 📦 Paketleri kur
+        run: |
+          pip install requests edge-tts
+          sudo apt-get update -qq
+          sudo apt-get install -y ffmpeg fonts-dejavu-core fonts-liberation
+          echo "FFmpeg: $(ffmpeg -version 2>&1 | head -1)"
+          echo "Python: $(python --version)"
+
+      # ── VİDEO ÜRET ──────────────────────────────────────────────────────────
+      - name: 🚀 Video üret
+        env:
+          GEMINI_API_KEY:        ${{ secrets.GEMINI_API_KEY }}
+          YOUTUBE_CLIENT_ID:     ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          TELEGRAM_BOT_TOKEN:    ${{ secrets.TELEGRAM_BOT_TOKEN }}
+          TELEGRAM_CHAT_ID:      ${{ secrets.TELEGRAM_CHAT_ID }}
+        run: |
+          python generate_video.py "${{ github.event.inputs.command }}"
+
+      # ── SONUÇ ───────────────────────────────────────────────────────────────
+      - name: 📊 Sonuç
+        if: always()
+        run: |
+          echo "=== ÇALIŞMA SONUCU ==="
+          cat output/result.json 2>/dev/null || echo "Sonuç yok"
+          echo ""
+          echo "=== DOSYALAR ==="
+          ls -lh output/ 2>/dev/null || echo "Output klasörü yok"
+
+      - name: 📁 Artifact kaydet
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: video-${{ github.run_number }}-${{ github.run_attempt }}
+          path: |
+            output/result.json
+            output/metadata.json
+            output/thumbnail.jpg
+          retention-days: 7
+          if-no-files-found: warn
