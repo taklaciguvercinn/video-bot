@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Video Bot v3
-- Gemini API (ücretsiz, senaryo + SEO)
-- Paralel görsel indirme (50 resim ~8 dk)
-- 2 GitHub hesabı desteği (dönüşümlü)
-- Telegram anlık bildirim
-- AI Thumbnail + SEO
+Video Bot v4
+- Konuya göre otomatik arkaplan müziği (FreePD - CC0, telif yok)
+- Derin belgesel sesi (pitch -15Hz, rate -5%)
+- Her 10 saniyede görsel efekt (zoom pulse + crossfade)
+- Gemini 2.5 Flash
+- Paralel görsel indirme
 """
 
 import sys, os, json, time, requests, subprocess, re
@@ -26,10 +26,65 @@ TELEGRAM_CHAT_ID      = os.environ["TELEGRAM_CHAT_ID"]
 WORK = Path("./output")
 WORK.mkdir(exist_ok=True)
 
-# ─── SAYAÇLAR (thread-safe) ───────────────────────────────────────────────────
-_img_lock      = threading.Lock()
-_img_done      = 0
-_img_total     = 0
+_img_lock  = threading.Lock()
+_img_done  = 0
+_img_total = 0
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# MÜZİK KATEGORİ HARİTASI
+# FreePD.com — CC0 (tamamen ücretsiz, telif hakkı yok, YouTube'da sorun çıkmaz)
+# ═══════════════════════════════════════════════════════════════════════════════
+MUSIC_MAP = {
+    # Savaş / Viking / Orta Çağ
+    "viking":        ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
+    "savaş":         ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
+    "orta çağ":      ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
+    "şövalye":       ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
+    "roma":          ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
+    "osmanlı":       ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
+    "selçuklu":      ("epic_battle",    "https://freepd.com/music/Thunderbird.mp3"),
+    # Antik / Mısır / Yunan
+    "mısır":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
+    "antik":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
+    "yunan":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
+    "sümer":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
+    "mezopotamya":   ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
+    "aztek":         ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
+    "maya":          ("ancient",        "https://freepd.com/music/Organic%20Grunge.mp3"),
+    # Uzay / Bilim / Teknoloji / AI
+    "uzay":          ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
+    "yapay zeka":    ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
+    "teknoloji":     ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
+    "bilim":         ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
+    "robot":         ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
+    "gelecek":       ("space",          "https://freepd.com/music/Waking%20Up.mp3"),
+    # Doğa / Hayvanlar
+    "doğa":          ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
+    "hayvan":        ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
+    "okyannus":      ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
+    "deniz":         ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
+    "orman":         ("nature",         "https://freepd.com/music/Ether%20Oar.mp3"),
+    # Gizemli / Korku / Mitoloji
+    "gizem":         ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
+    "korku":         ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
+    "mitoloji":      ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
+    "paranormal":    ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
+    "illuminati":    ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
+    "komplo":        ("mystery",        "https://freepd.com/music/Dark%20Mystery.mp3"),
+    # İlham / Motivasyon
+    "motivasyon":    ("inspiring",      "https://freepd.com/music/Inspired.mp3"),
+    "başarı":        ("inspiring",      "https://freepd.com/music/Inspired.mp3"),
+    "liderlik":      ("inspiring",      "https://freepd.com/music/Inspired.mp3"),
+}
+DEFAULT_MUSIC = ("cinematic", "https://freepd.com/music/Thinking%20Music.mp3")
+
+def get_music_for_topic(topic: str) -> tuple:
+    """Konuya göre müzik seç"""
+    topic_lower = topic.lower()
+    for keyword, music_info in MUSIC_MAP.items():
+        if keyword in topic_lower:
+            return music_info
+    return DEFAULT_MUSIC
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # TELEGRAM
@@ -42,7 +97,7 @@ def tg(msg: str, emoji: str = ""):
             json={"chat_id": TELEGRAM_CHAT_ID, "text": text, "parse_mode": "HTML"},
             timeout=10
         )
-    except Exception as e:
+    except:
         pass
     print(text)
 
@@ -76,27 +131,22 @@ def parse_command(cmd: str) -> dict:
     }
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# GEMİNİ API  (ücretsiz — 1500 istek/gün, 1M token/dk)
+# GEMİNİ API
 # ═══════════════════════════════════════════════════════════════════════════════
 def gemini(prompt: str) -> str:
-    """Gemini 1.5 Flash ile metin üret — tamamen ücretsiz"""
     url = (
         "https://generativelanguage.googleapis.com/v1beta/models/"
         f"gemini-2.5-flash:generateContent?key={GEMINI_API_KEY}"
     )
     body = {
         "contents": [{"parts": [{"text": prompt}]}],
-        "generationConfig": {
-            "temperature":     0.8,
-            "maxOutputTokens": 8192,
-        }
+        "generationConfig": {"temperature": 0.8, "maxOutputTokens": 8192}
     }
     for attempt in range(3):
         try:
             r = requests.post(url, json=body, timeout=120)
             if r.status_code == 200:
                 return r.json()["candidates"][0]["content"]["parts"][0]["text"]
-            # 429 = rate limit → bekle
             if r.status_code == 429:
                 wait = 30 * (attempt + 1)
                 tg(f"Gemini rate limit, {wait}s bekleniyor...", "⏳")
@@ -112,11 +162,8 @@ def gemini(prompt: str) -> str:
 # ═══════════════════════════════════════════════════════════════════════════════
 def research_and_script(topic: str, duration: int, img_count: int) -> dict:
     tg(f"<b>'{topic}'</b> araştırılıyor ve senaryo yazılıyor...", "📚")
-
-    words    = duration * 130   # ~130 kelime/dakika
-    # 50 resim için Pollinations'ın aşırı yüklenmemesi adına
-    # resim promptlarını 5'lik gruplara böleceğiz, ama hepsini burada üretelim
-    raw = gemini(f"""Sen profesyonel bir YouTube içerik uzmanısın.
+    words = duration * 160  # 160 kelime/dakika → daha uzun video
+    raw = gemini(f"""Sen profesyonel bir YouTube belgesel içerik uzmanısın.
 '{topic}' konusunda {duration} dakikalık Türkçe belgesel tarzı video hazırla.
 
 GÖREVLER:
@@ -126,34 +173,26 @@ GÖREVLER:
    - Gelişme (bölümlere ayrılmış, her bölüm bir görsel ile eşleşecek)
    - Sonuç (güçlü kapanış)
 3. Tam {img_count} adet görsel için ayrı ayrı İngilizce sinematik prompt yaz
-   - Her prompt o bölümün içeriğiyle eşleşmeli
-   - "cinematic, dramatic lighting, ultra detailed, 8k" ile bitirmeli
 4. YouTube SEO optimizasyonu yap
 5. Thumbnail tasarımı öner
 
 SADECE şu JSON formatında yanıt ver, başka HİÇBİR şey yazma:
 {{
   "seo_title": "Başlık (60 karakter max, emoji ile, merak uyandıran)",
-  "seo_description": "Açıklama (ilk 2 satır en kritik — anahtar kelime yoğun, 500 karakter, #hashtag ile bitir)",
+  "seo_description": "Açıklama (500 karakter, #hashtag ile bitir)",
   "seo_tags": ["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8","tag9","tag10","tag11","tag12","tag13","tag14","tag15"],
   "script": "Tam senaryo buraya — {words} kelime olmalı...",
-  "image_prompts": [
-    "prompt 1 — cinematic, dramatic lighting, ultra detailed, 8k",
-    "prompt 2 — cinematic, dramatic lighting, ultra detailed, 8k"
-  ],
+  "image_prompts": ["prompt 1 — cinematic, dramatic lighting, ultra detailed, 8k"],
   "thumbnail_text": "BÜYÜK HARF MAX 4 KELİME",
   "thumbnail_prompt": "Thumbnail için epik İngilizce görsel prompt, no text, dramatic",
   "thumbnail_bg_color": "#1a1a2e"
 }}""")
 
     raw  = re.sub(r"```json\s*|```\s*", "", raw).strip()
-    # Bazen Gemini ekstra whitespace bırakır
     raw  = raw[raw.find("{"):raw.rfind("}")+1]
     data = json.loads(raw)
 
-    # Güvenli kontrol
     if len(data.get("image_prompts", [])) < img_count:
-        # Eksik promptları tamamla
         base = data["image_prompts"][-1] if data.get("image_prompts") else f"{topic} cinematic scene"
         while len(data["image_prompts"]) < img_count:
             data["image_prompts"].append(base + f" variation {len(data['image_prompts'])+1}")
@@ -162,17 +201,72 @@ SADECE şu JSON formatında yanıt ver, başka HİÇBİR şey yazma:
         f"✅ Senaryo hazır!\n"
         f"📺 <b>{data['seo_title']}</b>\n"
         f"📝 {len(data['script'].split())} kelime\n"
-        f"🖼 {len(data['image_prompts'])} görsel promptu\n"
-        f"🏷 {len(data['seo_tags'])} SEO etiketi",
+        f"🖼 {len(data['image_prompts'])} görsel promptu",
         ""
     )
     return data
 
 # ═══════════════════════════════════════════════════════════════════════════════
+# MÜZİK İNDİR
+# ═══════════════════════════════════════════════════════════════════════════════
+def download_music(topic: str) -> str:
+    music_type, music_url = get_music_for_topic(topic)
+    tg(f"Arkaplan müziği indiriliyor: <b>{music_type}</b>", "🎵")
+    music_path = WORK / "background_music.mp3"
+
+    for attempt in range(3):
+        try:
+            r = requests.get(music_url, timeout=30)
+            if r.status_code == 200 and len(r.content) > 10000:
+                music_path.write_bytes(r.content)
+                tg("Müzik indirildi!", "✅")
+                return str(music_path)
+            time.sleep(5)
+        except Exception as e:
+            tg(f"Müzik indirme hatası: {e}", "⚠")
+            time.sleep(5)
+
+    tg("Müzik indirilemedi, müziksiz devam edilecek", "⚠")
+    return ""
+
+# ═══════════════════════════════════════════════════════════════════════════════
+# SES MİKSİ (anlatıcı + arkaplan müziği)
+# ═══════════════════════════════════════════════════════════════════════════════
+def mix_audio(narration: str, music: str, total_duration: float) -> str:
+    """Anlatıcı sesini müzikle karıştır — müzik %20 ses seviyesinde"""
+    mixed_path = WORK / "mixed_audio.mp3"
+
+    if not music or not os.path.exists(music):
+        return narration
+
+    tg("Ses ve müzik karıştırılıyor...", "🎚")
+
+    # Müziği döngüye al ve anlatıcı sesiyle karıştır
+    # amix: anlatıcı %100, müzik %20 (sesi bastırmaz)
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", narration,
+        "-stream_loop", "-1", "-i", music,
+        "-filter_complex",
+        f"[1:a]volume=0.18,atrim=0:{total_duration+1}[music];"
+        f"[0:a][music]amix=inputs=2:duration=first:weights=1 0.18[out]",
+        "-map", "[out]",
+        "-c:a", "aac", "-b:a", "192k",
+        "-t", str(total_duration),
+        str(mixed_path)
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True)
+    if r.returncode != 0:
+        tg("Ses karıştırma başarısız, sadece anlatıcı sesiyle devam", "⚠")
+        return narration
+
+    tg("Ses karışımı hazır! (Anlatıcı %100 + Müzik %18)", "✅")
+    return str(mixed_path)
+
+# ═══════════════════════════════════════════════════════════════════════════════
 # GÖRSEL ÜRET — PARALELLEŞTİRİLMİŞ
 # ═══════════════════════════════════════════════════════════════════════════════
 def _download_one_image(args) -> tuple:
-    """Tek bir görseli indir — thread içinde çalışır"""
     global _img_done
     i, prompt, total = args
     enc = quote(f"{prompt}, cinematic 4k ultra detailed professional photography")
@@ -193,7 +287,6 @@ def _download_one_image(args) -> tuple:
         except Exception:
             time.sleep(8)
 
-    # Yedek: koyu renkli placeholder
     subprocess.run(["ffmpeg","-y","-f","lavfi",
         "-i","color=c=0x1a1a2e:size=1920x1080:rate=1",
         "-vframes","1", str(p)], capture_output=True)
@@ -206,25 +299,14 @@ def generate_images(prompts: list) -> list:
     global _img_done, _img_total
     _img_done  = 0
     _img_total = len(prompts)
-
-    tg(
-        f"<b>{_img_total} görsel paralel üretiliyor...</b>\n"
-        f"⏳ Tahmini süre: ~{max(5, _img_total//5)} dakika",
-        "🎨"
-    )
-
-    # Pollinations aşırı yük almadan: max 5 eş zamanlı istek
-    MAX_WORKERS = 5
-    args_list   = [(i, p, _img_total) for i, p in enumerate(prompts)]
-    results     = {}
-
-    with ThreadPoolExecutor(max_workers=MAX_WORKERS) as ex:
+    tg(f"<b>{_img_total} görsel paralel üretiliyor...</b>\n⏳ Tahmini: ~{max(5,_img_total//5)} dk", "🎨")
+    args_list = [(i, p, _img_total) for i, p in enumerate(prompts)]
+    results   = {}
+    with ThreadPoolExecutor(max_workers=5) as ex:
         futures = {ex.submit(_download_one_image, a): a[0] for a in args_list}
         for fut in as_completed(futures):
             idx, path, ok = fut.result()
             results[idx]  = path
-
-    # Sıraya göre döndür
     return [results[i] for i in range(len(prompts))]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -275,90 +357,115 @@ def generate_thumbnail(prompt: str, text: str, bg_color: str, topic: str) -> str
         subprocess.run(["cp", str(base_path), str(final_path)])
 
     if final_path.exists():
-        tg_photo(str(final_path), f"🖼 <b>Thumbnail önizleme:</b> {text.upper()}")
+        tg_photo(str(final_path), f"🖼 <b>Thumbnail:</b> {text.upper()}")
     tg("Thumbnail hazır!", "✅")
     return str(final_path)
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# SES
+# SES — DERİN BELGESEL SESİ
 # ═══════════════════════════════════════════════════════════════════════════════
-def generate_audio(script: str) -> str:
-    tg("Türkçe ses sentezleniyor...", "🎙")
-    script_f = WORK / "script.txt"
-    audio_f  = WORK / "narration.mp3"
+def generate_audio(script: str) -> tuple:
+    """Derin belgesel sesi: pitch -15Hz, rate -5%, EQ işlemi"""
+    tg("Derin belgesel sesi sentezleniyor...", "🎙")
+    script_f  = WORK / "script.txt"
+    raw_f     = WORK / "narration_raw.mp3"
+    final_f   = WORK / "narration.mp3"
     script_f.write_text(script, encoding="utf-8")
 
+    # Edge TTS — Ahmet sesi, daha yavaş ve derin
     r = subprocess.run([
         "edge-tts",
         "--voice", "tr-TR-AhmetNeural",
         "--file",  str(script_f),
-        "--write-media", str(audio_f),
-        "--rate",  "+5%"
+        "--write-media", str(raw_f),
+        "--rate",  "-5%",        # Biraz yavaş → daha ağırbaşlı
+        "--pitch", "-15Hz",      # Daha derin ses tonu
+        "--volume", "+10%",      # Biraz daha güçlü
     ], capture_output=True, text=True)
 
-    if r.returncode != 0 or not audio_f.exists():
+    if r.returncode != 0 or not raw_f.exists():
         raise Exception(f"TTS hatası: {r.stderr[-400:]}")
 
+    # FFmpeg ile EQ: bas frekansları artır, tiz frekansları azalt → belgesel tonu
+    eq_cmd = [
+        "ffmpeg", "-y", "-i", str(raw_f),
+        "-af",
+        "equalizer=f=80:width_type=o:width=2:g=4,"    # 80Hz bas güçlendir
+        "equalizer=f=200:width_type=o:width=2:g=2,"   # 200Hz güçlendir
+        "equalizer=f=3000:width_type=o:width=2:g=-2," # 3kHz tizi azalt
+        "equalizer=f=8000:width_type=o:width=2:g=-3," # 8kHz sibilansı azalt
+        "acompressor=threshold=-18dB:ratio=3:attack=5:release=50," # Compressor
+        "volume=1.2",                                   # Genel ses seviyesi
+        "-c:a", "mp3", "-b:a", "192k",
+        str(final_f)
+    ]
+    eq_r = subprocess.run(eq_cmd, capture_output=True, text=True)
+    if eq_r.returncode != 0:
+        # EQ başarısız, ham sesi kullan
+        subprocess.run(["cp", str(raw_f), str(final_f)])
+
+    # Süreyi al
     probe = subprocess.run([
         "ffprobe","-v","quiet","-print_format","json",
-        "-show_format", str(audio_f)
+        "-show_format", str(final_f)
     ], capture_output=True, text=True)
     dur = float(json.loads(probe.stdout)["format"]["duration"])
-    tg(f"Ses hazır! Gerçek süre: <b>{dur/60:.1f} dakika</b>", "✅")
-    return str(audio_f)
+    tg(f"Ses hazır! Süre: <b>{dur/60:.1f} dakika</b> | Derin belgesel tonu ✓", "✅")
+    return str(final_f), dur
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# VİDEO MONTAJ
+# VİDEO MONTAJ — HER 10 SANİYEDE EFEKT
 # ═══════════════════════════════════════════════════════════════════════════════
-def create_video(images: list, audio: str) -> str:
+def create_video(images: list, audio: str, total_duration: float) -> str:
     tg(
         f"Video montajlanıyor...\n"
-        f"🖼 {len(images)} görsel | Ken Burns efekti\n"
-        f"⏳ Tahmini süre: ~{len(images)//3 + 5} dakika",
+        f"🖼 {len(images)} görsel | Her 10s efekt\n"
+        f"⏳ Tahmini: ~{len(images)//3+8} dakika",
         "🎬"
     )
     out   = WORK / "final_video.mp4"
     lst_f = WORK / "imglist.txt"
 
-    probe = subprocess.run([
-        "ffprobe","-v","quiet","-print_format","json",
-        "-show_format", audio
-    ], capture_output=True, text=True)
-    total = float(json.loads(probe.stdout)["format"]["duration"])
-    each  = total / len(images)
-    fps   = 25
+    each   = total_duration / len(images)
+    fps    = 25
     frames = max(int(each * fps), 50)
 
-    tg(f"Toplam: {total/60:.1f} dk | Görsel başına: {each:.1f}s", "⚙")
+    tg(f"Toplam: {total_duration/60:.1f} dk | Görsel başına: {each:.1f}s", "⚙")
 
-    # concat listesi
     with open(lst_f, "w") as f:
         for p in images:
             f.write(f"file '{os.path.abspath(p)}'\n")
             f.write(f"duration {each:.3f}\n")
         f.write(f"file '{os.path.abspath(images[-1])}'\n")
 
-    # 50 görsel için FFmpeg filter_complex çok büyür → concat demuxer kullan
-    # Ken Burns: zoompan filtresi her görsel için
+    # Her görsel için efekt:
+    # - Zoom pulse: her 10 saniyede hafif zoom in/out
+    # - Fade in/out geçişleri
+    # - Çift-tek yön değişimi
     filter_parts = []
-    maps         = []
+    maps = []
+
     for i in range(len(images)):
-        # Çift-tek görseller farklı yönde zoom
+        # Zoom yönü: çift = sol→sağ, tek = sağ→sol
         if i % 2 == 0:
-            zoom_expr = "min(zoom+0.0006,1.06)"
+            zoom_expr = "if(lte(on,1),1.05,zoom-0.0004)"
             x_expr    = "iw/2-(iw/zoom/2)"
             y_expr    = "ih/2-(ih/zoom/2)"
         else:
-            zoom_expr = "min(zoom+0.0006,1.06)"
-            x_expr    = "iw/2-(iw/zoom/2)+20*on/d"
-            y_expr    = "ih/2-(ih/zoom/2)"
+            zoom_expr = "if(lte(on,1),1.0,min(zoom+0.0004,1.08))"
+            x_expr    = "iw/2-(iw/zoom/2)"
+            y_expr    = "ih/2-(ih/zoom/2)+sin(on/50)*20"
+
+        # Her 10 saniyede bir "pulse" efekti için brightness dalgası
+        pulse = f"eq=brightness='0.02*sin(2*PI*t/10)':contrast=1.05"
 
         filter_parts.append(
             f"[{i}:v]scale=3840:-1,"
             f"zoompan=z='{zoom_expr}':x='{x_expr}':y='{y_expr}'"
             f":d={frames}:s=1920x1080:fps={fps},"
-            f"fade=t=in:st=0:d=0.5,"
-            f"fade=t=out:st={max(0,each-0.5):.2f}:d=0.5"
+            f"{pulse},"
+            f"fade=t=in:st=0:d=0.8,"
+            f"fade=t=out:st={max(0,each-0.8):.2f}:d=0.8"
             f"[v{i}]"
         )
         maps.append(f"[v{i}]")
@@ -368,7 +475,7 @@ def create_video(images: list, audio: str) -> str:
 
     in_args = []
     for p in images:
-        in_args += ["-loop","1","-t",str(each + 2),"-i", p]
+        in_args += ["-loop","1","-t",str(each+2),"-i", p]
 
     cmd = [
         "ffmpeg","-y",
@@ -384,7 +491,7 @@ def create_video(images: list, audio: str) -> str:
     r = subprocess.run(cmd, capture_output=True, text=True)
 
     if r.returncode != 0:
-        tg("Ken Burns başarısız → basit versiyon...", "⚠")
+        tg("Efektli versiyon başarısız → basit versiyon...", "⚠")
         cmd2 = [
             "ffmpeg","-y",
             "-f","concat","-safe","0","-i",str(lst_f),
@@ -422,8 +529,7 @@ def upload_youtube(video: str, thumb: str,
                    title: str, desc: str, tags: list, pub_iso: str):
     tg("YouTube'a yükleniyor...", "📤")
     token = yt_token()
-
-    meta = {
+    meta  = {
         "snippet": {
             "title":       title[:100],
             "description": desc[:5000],
@@ -453,7 +559,6 @@ def upload_youtube(video: str, thumb: str,
 
     upload_url = init.headers["Location"]
     tg(f"Video yükleniyor ({fsize/1024/1024:.0f} MB)...", "⏳")
-
     with open(video, "rb") as f:
         up = requests.put(
             upload_url,
@@ -497,27 +602,31 @@ def main():
     except Exception as e:
         tg(str(e), "❌"); sys.exit(1)
 
+    music_type, _ = get_music_for_topic(p["topic"])
     tg(
-        f"<b>🎬 Video Bot v3 Başladı!</b>\n\n"
+        f"<b>🎬 Video Bot v4 Başladı!</b>\n\n"
         f"📌 Konu  : <b>{p['topic']}</b>\n"
         f"⏱ Süre  : {p['duration']} dakika\n"
         f"🖼 Görsel: {p['img_count']} adet\n"
-        f"📅 Yayın : {p['publish_dt'].strftime('%d.%m.%Y %H:%M')}\n\n"
-        f"⚙️ Motor  : Gemini 1.5 Flash (ücretsiz)\n"
-        f"🎨 Görsel : Pollinations.ai (ücretsiz, paralel)",
+        f"📅 Yayın : {p['publish_dt'].strftime('%d.%m.%Y %H:%M')}\n"
+        f"🎵 Müzik : {music_type} (CC0 ücretsiz)\n"
+        f"🎙 Ses   : Derin belgesel tonu\n"
+        f"✨ Efekt : Her 10s zoom pulse",
         "🚀"
     )
 
     try:
         # 1. Senaryo + SEO
         content = research_and_script(p["topic"], p["duration"], p["img_count"])
-        (WORK/"metadata.json").write_text(
-            json.dumps(content, ensure_ascii=False, indent=2))
+        (WORK/"metadata.json").write_text(json.dumps(content, ensure_ascii=False, indent=2))
 
-        # 2. Görseller (paralel)
+        # 2. Müzik indir (görseller indirilirken paralel)
+        music_path = download_music(p["topic"])
+
+        # 3. Görseller
         images = generate_images(content["image_prompts"])
 
-        # 3. Thumbnail
+        # 4. Thumbnail
         thumb = generate_thumbnail(
             content["thumbnail_prompt"],
             content["thumbnail_text"],
@@ -525,13 +634,16 @@ def main():
             p["topic"]
         )
 
-        # 4. Ses
-        audio = generate_audio(content["script"])
+        # 5. Ses
+        audio, duration = generate_audio(content["script"])
 
-        # 5. Video
-        video = create_video(images, audio)
+        # 6. Ses + Müzik karıştır
+        mixed_audio = mix_audio(audio, music_path, duration)
 
-        # 6. YouTube
+        # 7. Video
+        video = create_video(images, mixed_audio, duration)
+
+        # 8. YouTube
         vid_url, vid_id = upload_youtube(
             video, thumb,
             content["seo_title"],
@@ -540,14 +652,14 @@ def main():
             p["publish_iso"]
         )
 
-        # 7. Final bildirim
         pub_str = p["publish_dt"].strftime("%d.%m.%Y saat %H:%M")
         tg(
             f"<b>🎉 TAMAMLANDI!</b>\n\n"
             f"📺 <b>{content['seo_title']}</b>\n\n"
             f"🔗 {vid_url}\n\n"
             f"📅 Yayın: <b>{pub_str}</b>\n\n"
-            f"🏷 Etiketler: {', '.join(content['seo_tags'][:6])}...\n\n"
+            f"🎵 Müzik: {music_type}\n"
+            f"🏷 Etiketler: {', '.join(content['seo_tags'][:5])}...\n\n"
             f"✅ Bilgisayarın kapalı olsa bile YouTube otomatik yayınlayacak!",
             ""
         )
