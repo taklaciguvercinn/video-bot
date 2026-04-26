@@ -222,15 +222,46 @@ JSON formatında yanıt ver:
     for attempt in range(3):
         try:
             raw = gemini(prompt)
-            # JSON temizle
+            # Tüm olası temizleme
             raw = re.sub(r"```json\s*|```\s*", "", raw).strip()
-            # JSON bloğunu bul
-            start = raw.find("{")
-            end   = raw.rfind("}") + 1
-            if start == -1 or end == 0:
+            
+            # JSON bloğunu bul — { ile başlayan ilk geçerli bloğu al
+            # Bazen Gemini önüne metin ekliyor
+            json_str = None
+            
+            # Yöntem 1: Direkt parse dene
+            try:
+                data = json.loads(raw)
+                json_str = raw
+            except:
+                pass
+            
+            # Yöntem 2: İlk { ile son } arasını al
+            if not json_str:
+                start = raw.find("{")
+                end   = raw.rfind("}") + 1
+                if start != -1 and end > start:
+                    try:
+                        candidate = raw[start:end]
+                        data = json.loads(candidate)
+                        json_str = candidate
+                    except:
+                        pass
+            
+            # Yöntem 3: Regex ile JSON bloğunu bul
+            if not json_str:
+                matches = re.findall(r'\{[^{}]*(?:\{[^{}]*\}[^{}]*)*\}', raw, re.DOTALL)
+                for m in matches:
+                    try:
+                        data = json.loads(m)
+                        if "seo_title" in data:
+                            json_str = m
+                            break
+                    except:
+                        continue
+            
+            if not json_str:
                 raise Exception(f"JSON bulunamadı, ham yanıt: {raw[:200]}")
-            raw = raw[start:end]
-            data = json.loads(raw)
 
             # Zorunlu alanları kontrol et
             for field in ["seo_title", "script", "image_prompts"]:
