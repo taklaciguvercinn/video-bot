@@ -85,7 +85,7 @@ def gemini(prompt):
                 time.sleep(20)
             elif r.status_code in [429,503]:
                 tg(f"Gemini mesgul, {40*(deneme+1)}s...","⏳")
-                time.sleep(40*(deneme+1))
+                time.sleep(15*(deneme+1))
             else:
                 raise Exception(f"HTTP {r.status_code}: {r.json().get('error',{}).get('message',r.text[:80])}")
         except requests.Timeout:
