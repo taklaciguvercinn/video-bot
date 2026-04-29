@@ -18,9 +18,9 @@ WORK.mkdir(exist_ok=True)
 
 # Deneme sirasi - ilki calismassa otomatikolarak digerine gec
 GEMINI_MODELS = [
-    "gemini-1.5-flash-latest",
-    "gemini-1.5-flash-002",
-    "gemini-1.5-flash-001",
+    "gemini-2.0-flash",
+    "gemini-2.0-flash-lite",
+    "gemini-1.5-flash",
 ]
 
 # ─── TELEGRAM ────────────────────────────────────────────────────────────────
@@ -65,7 +65,7 @@ def gemini(prompt, max_tokens=8192):
     thinkingConfig yok - eski modeller desteklemiyor.
     """
     for model in GEMINI_MODELS:
-        url = f"https://generativelanguage.googleapis.com/v1beta/models/{model}:generateContent"
+        url = f"https://generativelanguage.googleapis.com/v1/models/{model}:generateContent"
         headers = {
             "Content-Type": "application/json",
             "x-goog-api-key": GEMINI_API_KEY
