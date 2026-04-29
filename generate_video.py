@@ -272,10 +272,19 @@ def muzik_indir(konu):
     tip, url = muzik_sec(konu)
     tg(f"Muzik indiriliyor: {tip}", "🎵")
     yol = WORK / "muzik.mp3"
-    basliklar = {"User-Agent": "Mozilla/5.0 (compatible; VideoBot/6.0)", "Accept": "*/*"}
+
+    # Private repo icin GitHub token gerekli
+    gh_token = os.environ.get("GITHUB_TOKEN_A", "")
+    basliklar = {
+        "User-Agent": "Mozilla/5.0 (compatible; VideoBot/6.0)",
+        "Accept": "application/octet-stream"
+    }
+    if gh_token:
+        basliklar["Authorization"] = f"token {gh_token}"
+
     for deneme in range(4):
         try:
-            r = requests.get(url, headers=basliklar, timeout=60, stream=True)
+            r = requests.get(url, headers=basliklar, timeout=90, stream=True)
             if r.status_code == 200:
                 veri = b"".join(r.iter_content(8192))
                 if len(veri) > 10000:
@@ -287,6 +296,7 @@ def muzik_indir(konu):
         except Exception as e:
             tg(f"Muzik hatasi ({deneme+1}/4): {str(e)[:60]}", "⚠")
             time.sleep(8)
+
     tg("Muzik indirilemedi, muziksiz devam", "⚠")
     return ""
 
@@ -294,29 +304,35 @@ def muzik_indir(konu):
 def _gorsel_indir(args):
     global _done
     i, prompt, toplam = args
-    enc = quote(f"{prompt}, ultra detailed 4k cinematic")
-    url = f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={i*7+42}&nologo=true&model=flux"
     yol = WORK / f"img_{i+1:02d}.jpg"
-    for _ in range(4):
-        try:
-            r = requests.get(url, timeout=120)
-            if r.status_code == 200 and len(r.content) > 8000:
-                yol.write_bytes(r.content)
-                with _lock:
-                    _done += 1
-                    d = _done
-                tg(f"Gorsel {d}/{toplam} hazir", "🖼")
-                return (i, str(yol))
-            time.sleep(8)
-        except:
-            time.sleep(8)
-    # Yedek: siyah gorsel
+
+    # 3 farkli seed dene
+    for seed in [i*7+42, i*13+7, i*3+99]:
+        enc = quote(f"{prompt}, ultra detailed 4k cinematic photography")
+        url = f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true&model=flux"
+        for _ in range(3):
+            try:
+                r = requests.get(url, timeout=120)
+                if r.status_code == 200 and len(r.content) > 15000:
+                    if r.content[:2] == b'\xff\xd8':  # Gecerli JPEG
+                        yol.write_bytes(r.content)
+                        with _lock:
+                            _done += 1; d = _done
+                        tg(f"Gorsel {d}/{toplam} hazir", "🖼")
+                        return (i, str(yol))
+                time.sleep(6)
+            except:
+                time.sleep(8)
+
+    # Yedek: renkli gradient
+    renkler = ["0x1a1a2e", "0x2d1b69", "0x1a3a1a", "0x3a1a1a"]
+    renk = renkler[i % len(renkler)]
     subprocess.run(["ffmpeg", "-y", "-f", "lavfi",
-        "-i", "color=c=0x1a1a2e:size=1920x1080:rate=1",
-        "-vframes", "1", str(yol)], capture_output=True)
+        "-i", f"color=c={renk}:size=1920x1080:rate=1",
+        "-vframes", "1", "-q:v", "2", str(yol)], capture_output=True)
     with _lock:
         _done += 1
-    tg(f"Gorsel {i+1} yedek", "⚠")
+    tg(f"Gorsel {i+1} yedek renk kullanildi", "⚠")
     return (i, str(yol))
 
 def gorseller_uret(promptlar):
@@ -454,7 +470,7 @@ def ses_miksle(anlati, muzik, sure):
 def video_montaj(gorseller, ses, toplam_sure):
     tg(
         f"Video montajlaniyor...\n"
-        f"🖼 {len(gorseller)} gorsel | 4 farkli zoom efekti\n"
+        f"🖼 {len(gorseller)} gorsel | Zoom + Fade efektleri\n"
         f"⏳ Tahmini: ~{len(gorseller)//2 + 5} dakika",
         "🎬"
     )
@@ -464,24 +480,26 @@ def video_montaj(gorseller, ses, toplam_sure):
     fps = 25
     tg(f"Toplam: {toplam_sure/60:.1f} dk | Her gorsel: {her_biri:.1f}s", "⚙")
 
-    # Her gorseli ayri isle
     segmentler = []
     for i, gorsel in enumerate(gorseller):
         seg = WORK / f"seg_{i:02d}.mp4"
         d = i % 4
-        if d == 0:   z,x,y = "min(zoom+0.0007,1.08)", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
-        elif d == 1: z,x,y = "min(zoom+0.0007,1.08)", "iw/2-(iw/zoom/2)+on*0.4", "ih/2-(ih/zoom/2)"
-        elif d == 2: z,x,y = "if(lte(on,1),1.08,max(zoom-0.0006,1.0))", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
-        else:        z,x,y = "min(zoom+0.0005,1.06)", "iw/2-(iw/zoom/2)-on*0.3", "ih*0.1+(ih/zoom*0.4)"
-
         fo = max(0, her_biri - 0.6)
         fr = max(int(her_biri * fps), 25)
+
+        # RAM dostu zoom - 2x scale yeterli
+        if d == 0:   z,x,y = "min(zoom+0.0008,1.1)", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+        elif d == 1: z,x,y = "min(zoom+0.0008,1.1)", "iw/2-(iw/zoom/2)+on*0.5", "ih/2-(ih/zoom/2)"
+        elif d == 2: z,x,y = "if(lte(on,1),1.1,max(zoom-0.0008,1.0))", "iw/2-(iw/zoom/2)", "ih/2-(ih/zoom/2)"
+        else:        z,x,y = "min(zoom+0.0006,1.08)", "iw/2-(iw/zoom/2)-on*0.4", "ih/2-(ih/zoom/2)"
 
         cmd = [
             "ffmpeg", "-y",
             "-loop", "1", "-t", str(her_biri + 1), "-i", gorsel,
             "-vf",
-            f"scale=3840:-2,"
+            f"scale=2*iw:-1,"  # RAM dostu - sadece 2x buyut
+            f"crop=iw/2:ih/2,"  # Merkezi kes
+            f"scale=1920:1080,"  # 1080p'e getir
             f"zoompan=z='{z}':x='{x}':y='{y}':d={fr}:s=1920x1080:fps={fps},"
             f"fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5",
             "-t", str(her_biri),
@@ -493,20 +511,40 @@ def video_montaj(gorseller, ses, toplam_sure):
             segmentler.append(str(seg))
             tg(f"Segment {i+1}/{len(gorseller)} zoom ok", "🎬")
         else:
-            # Yedek: basit scale
+            # Yedek: basit pan efekti
+            pan_x = f"if(lte(on,1),0,min(on*{2 if i%2==0 else -2},iw*0.05))"
             cmd2 = [
                 "ffmpeg", "-y",
                 "-loop", "1", "-t", str(her_biri), "-i", gorsel,
-                "-vf", "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1",
+                "-vf",
+                f"scale=2000:1125,"
+                f"crop=1920:1080:x='{pan_x}':y=0,"
+                f"fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5",
                 "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
                 "-an", "-pix_fmt", "yuv420p", str(seg)
             ]
             r2 = subprocess.run(cmd2, capture_output=True, text=True, timeout=120)
-            if r2.returncode == 0:
+            if r2.returncode == 0 and seg.exists():
                 segmentler.append(str(seg))
-                tg(f"Segment {i+1} yedek ok", "⚠")
+                tg(f"Segment {i+1} pan efekti ok", "⚠")
             else:
-                tg(f"Segment {i+1} atildi!", "❌")
+                # Son yedek: sadece fade
+                cmd3 = [
+                    "ffmpeg", "-y",
+                    "-loop", "1", "-t", str(her_biri), "-i", gorsel,
+                    "-vf",
+                    f"scale=1920:1080:force_original_aspect_ratio=decrease,"
+                    f"pad=1920:1080:-1:-1,"
+                    f"fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5",
+                    "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+                    "-an", "-pix_fmt", "yuv420p", str(seg)
+                ]
+                r3 = subprocess.run(cmd3, capture_output=True, text=True, timeout=120)
+                if r3.returncode == 0:
+                    segmentler.append(str(seg))
+                    tg(f"Segment {i+1} fade ok", "⚠")
+                else:
+                    tg(f"Segment {i+1} atildi!", "❌")
 
     if not segmentler:
         raise Exception("Hicbir segment olusturulamadi!")
