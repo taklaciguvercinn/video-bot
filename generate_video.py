@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+ #!/usr/bin/env python3
 """Video Bot v8 - Kusursuz, tum problemler cozuldu"""
 
 import sys, os, json, time, requests, subprocess, re
