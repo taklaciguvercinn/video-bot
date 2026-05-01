@@ -614,14 +614,26 @@ def video_montaj(gorseller, ses, toplam_sure):
         "ffmpeg", "-y",
         "-f", "concat", "-safe", "0", "-i", str(liste),
         "-i", ses,
-        "-c:v", "libx264", "-preset", "fast", "-crf", "22",
+        "-c:v", "copy",
         "-c:a", "aac", "-b:a", "192k",
         "-shortest", "-movflags", "+faststart",
         str(cikis)
     ]
-    r = subprocess.run(cmd_son, capture_output=True, text=True, timeout=900)
+    r = subprocess.run(cmd_son, capture_output=True, text=True, timeout=3600)
     if r.returncode != 0:
-        raise Exception(f"Birlestirme hatasi: {r.stderr[-200:]}")
+        # copy basarisizsa encode et
+        cmd_son2 = [
+            "ffmpeg", "-y",
+            "-f", "concat", "-safe", "0", "-i", str(liste),
+            "-i", ses,
+            "-c:v", "libx264", "-preset", "ultrafast", "-crf", "28",
+            "-c:a", "aac", "-b:a", "128k",
+            "-shortest", "-movflags", "+faststart",
+            str(cikis)
+        ]
+        r = subprocess.run(cmd_son2, capture_output=True, text=True, timeout=3600)
+        if r.returncode != 0:
+            raise Exception(f"Birlestirme hatasi: {r.stderr[-200:]}")
 
     mb = os.path.getsize(cikis) / 1024 / 1024
     tg(f"Video hazir! <b>{mb:.0f} MB</b>", "✅")
