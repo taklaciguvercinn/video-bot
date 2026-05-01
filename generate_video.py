@@ -1,4 +1,4 @@
- #!/usr/bin/env python3
+#!/usr/bin/env python3
 """Video Bot v8 - Kusursuz, tum problemler cozuldu"""
 
 import sys, os, json, time, requests, subprocess, re
@@ -244,88 +244,144 @@ Kurallar: Apostrof yok, emoji yok, baslik yok, sadece duz anlatim metni."""
     tg(f"Senaryo tamamlandi: <b>{toplam} kelime</b> (~{toplam/130:.0f} dk ses) | {resim_sayisi} gorsel promptu", "📊")
     return meta
 
-# ─── MUZİK - FFmpeg (her zaman calisiyor) ────────────────────────────────────
+# ─── MUZİK - WAV DOSYASINDAN URET (garantili) ────────────────────────────────
 def muzik_uret(konu, sure_sn):
     tg("Konuya ozel muzik uretiliyor...", "🎵")
-    yol = WORK / "muzik.mp3"
+    yol  = WORK / "muzik.mp3"
+    wav  = WORK / "muzik_raw.wav"
     k = konu.lower()
     for c, r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]:
         k = k.replace(c, r)
 
-    if any(x in k for x in ["viking","savas","osmanli","roma","selcuklu","tarih","savasc"]):
-        # Epik savas tonu
-        f1 = "aevalsrc=0.3*sin(55*2*PI*t)+0.2*sin(110*2*PI*t)+0.15*sin(82*2*PI*t)+0.08*sin(41*2*PI*t):s=44100"
-    elif any(x in k for x in ["misir","antik","yunan","sumer","babil","mezopotamya","fenike"]):
-        # Mistik antik
-        f1 = "aevalsrc=0.25*sin(174*2*PI*t)+0.2*sin(261*2*PI*t)+0.15*sin(348*2*PI*t)+0.1*sin(130*2*PI*t):s=44100"
-    elif any(x in k for x in ["uzay","yapay","teknoloji","bilim","robot","gelecek","dijital"]):
-        # Uzay ambient
-        f1 = "aevalsrc=0.2*sin(220*2*PI*t*(1+0.005*sin(0.1*2*PI*t)))+0.15*sin(330*2*PI*t)+0.1*sin(440*2*PI*t):s=44100"
-    elif any(x in k for x in ["doga","hayvan","deniz","orman","okyanus","bitki"]):
-        # Doga
-        f1 = "aevalsrc=0.15*sin(196*2*PI*t)+0.12*sin(261*2*PI*t)+0.1*sin(329*2*PI*t)+0.08*sin(392*2*PI*t):s=44100"
-    elif any(x in k for x in ["gizem","korku","paranormal","komplo","kara","karanl"]):
-        # Gizem / karanlık
-        f1 = "aevalsrc=0.2*sin(73*2*PI*t)+0.15*sin(110*2*PI*t)+0.1*sin(155*2*PI*t)+0.08*sin(207*2*PI*t):s=44100"
+    # Konuya gore frekanslar
+    if any(x in k for x in ["viking","savas","osmanli","roma","selcuklu","tarih"]):
+        freqs, label = [55, 82, 110, 165], "epic"
+    elif any(x in k for x in ["misir","antik","yunan","sumer","babil","mezopotamya"]):
+        freqs, label = [174, 261, 348, 130], "ancient"
+    elif any(x in k for x in ["uzay","yapay","teknoloji","bilim","robot","gelecek"]):
+        freqs, label = [220, 330, 440, 110], "space"
+    elif any(x in k for x in ["doga","hayvan","deniz","orman","okyanus"]):
+        freqs, label = [196, 261, 329, 392], "nature"
+    elif any(x in k for x in ["gizem","korku","paranormal","komplo"]):
+        freqs, label = [73, 110, 155, 207], "mystery"
     else:
-        # Genel sinematik
-        f1 = "aevalsrc=0.2*sin(130*2*PI*t)+0.18*sin(164*2*PI*t)+0.15*sin(196*2*PI*t)+0.1*sin(261*2*PI*t):s=44100"
+        freqs, label = [130, 164, 196, 261], "cinematic"
 
-    fade_out = max(0, sure_sn - 5)
-    cmd = [
-        "ffmpeg", "-y", "-f", "lavfi", "-i", f1,
-        "-af", f"aecho=0.8:0.9:100:0.3,afade=t=in:st=0:d=3,afade=t=out:st={fade_out}:d=5,volume=0.6",
-        "-t", str(sure_sn + 20),
-        "-c:a", "mp3", "-b:a", "128k", str(yol)
-    ]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=60)
-    if r.returncode == 0 and yol.exists():
-        tg("Muzik hazir! (Konuya ozel)", "✅")
-        return str(yol)
+    # Python ile WAV dosyasi uret (FFmpeg'e bagimli degil)
+    import struct, math
+    sample_rate = 44100
+    duration    = min(sure_sn + 30, 3600)
+    num_samples = sample_rate * duration
+    fade_samples = sample_rate * 5  # 5sn fade
+
+    try:
+        # WAV header
+        data_size = num_samples * 2  # 16-bit mono
+        with open(wav, 'wb') as f:
+            # RIFF header
+            f.write(b'RIFF')
+            f.write(struct.pack('<I', 36 + data_size))
+            f.write(b'WAVE')
+            f.write(b'fmt ')
+            f.write(struct.pack('<I', 16))
+            f.write(struct.pack('<H', 1))       # PCM
+            f.write(struct.pack('<H', 1))       # Mono
+            f.write(struct.pack('<I', sample_rate))
+            f.write(struct.pack('<I', sample_rate * 2))
+            f.write(struct.pack('<H', 2))
+            f.write(struct.pack('<H', 16))
+            f.write(b'data')
+            f.write(struct.pack('<I', data_size))
+
+            # Ses ornekleri uret (chunk chunk yaz - bellek dostu)
+            chunk = 44100  # 1sn'lik chunk
+            amps  = [0.25, 0.18, 0.12, 0.08]
+
+            for start in range(0, num_samples, chunk):
+                end = min(start + chunk, num_samples)
+                samples = []
+                for n in range(start, end):
+                    t = n / sample_rate
+                    # Cok sesli dalga
+                    val = sum(a * math.sin(2 * math.pi * fr * t)
+                              for a, fr in zip(amps, freqs))
+                    # Hafif titresim (vibrato)
+                    val *= (1 + 0.02 * math.sin(2 * math.pi * 0.3 * t))
+                    # Fade in / out
+                    if n < fade_samples:
+                        val *= n / fade_samples
+                    elif n > num_samples - fade_samples:
+                        val *= (num_samples - n) / fade_samples
+                    # 16-bit klip
+                    val = max(-0.9, min(0.9, val))
+                    samples.append(struct.pack('<h', int(val * 32767)))
+                f.write(b''.join(samples))
+
+        tg(f"Muzik WAV uretildi ({label}), MP3'e donusturuluyor...", "🎵")
+
+        # WAV → MP3
+        r = subprocess.run([
+            "ffmpeg", "-y", "-i", str(wav),
+            "-af", "aecho=0.6:0.7:80:0.2,volume=0.6",
+            "-c:a", "mp3", "-b:a", "128k", str(yol)
+        ], capture_output=True, text=True, timeout=120)
+
+        if r.returncode == 0 and yol.exists() and yol.stat().st_size > 1000:
+            tg(f"Muzik hazir! ({label}, {duration//60} dk)", "✅")
+            return str(yol)
+
+    except Exception as e:
+        tg(f"Muzik uretim hatasi: {str(e)[:60]}", "⚠")
+
     tg("Muzik basarisiz, muziksiz devam", "⚠")
     return ""
 
-# ─── GORSEL - AKILLI PARALEL İNDİRME ────────────────────────────────────────
+# ─── GORSEL - SIRALI + AKILLI RETRY ─────────────────────────────────────────
 def gorsel_indir(i, prompt, toplam):
-    """Tek gorsel indir - paralel cagrilacak"""
     yol = WORK / f"img_{i+1:02d}.jpg"
 
-    for model in ["flux", "turbo"]:
-        seeds = [i*7+42, i*13+17, i*3+99] if model == "flux" else [i*31+7]
-        for seed in seeds:
-            enc = quote(f"{prompt}, ultra detailed 4k cinematic photography")
-            url = (f"https://image.pollinations.ai/prompt/{enc}"
-                   f"?width=1920&height=1080&seed={seed}&nologo=true&model={model}")
-            try:
-                r = requests.get(url, timeout=60)
-                if r.status_code == 200 and len(r.content) > 10000 and r.content[:2] == b'\xff\xd8':
-                    yol.write_bytes(r.content)
-                    tg(f"Gorsel {i+1}/{toplam} ✓ ({model})", "🖼")
-                    return str(yol)
-                elif r.status_code == 429:
-                    time.sleep(20)
-                else:
-                    time.sleep(3)
-            except:
+    # Her model ve seed kombinasyonu dene
+    kombinasyonlar = [
+        ("flux",  i*7+42),
+        ("flux",  i*13+17),
+        ("turbo", i*31+7),
+        ("flux",  i*3+99),
+        ("turbo", i*23+13),
+    ]
+    for model, seed in kombinasyonlar:
+        enc = quote(f"{prompt}, cinematic 4k dramatic professional photography")
+        url = (f"https://image.pollinations.ai/prompt/{enc}"
+               f"?width=1920&height=1080&seed={seed}&nologo=true&model={model}")
+        try:
+            r = requests.get(url, timeout=90)
+            if r.status_code == 200 and len(r.content) > 10000 and r.content[:2] == b'\xff\xd8':
+                yol.write_bytes(r.content)
+                tg(f"Gorsel {i+1}/{toplam} ✓", "🖼")
+                time.sleep(3)  # Kisa bekleme - rate limit icin
+                return str(yol)
+            elif r.status_code == 429:
+                tg(f"Gorsel {i+1} rate limit, 30s...", "⏳")
+                time.sleep(30)
+            else:
                 time.sleep(5)
+        except:
+            time.sleep(5)
 
-    # FFmpeg gradient yedek
-    renkler = [("0x1a1a2e","0x16213e"),("0x2d1b00","0x4a2f00"),
-               ("0x0d1b0d","0x1a3a1a"),("0x1a0000","0x3a1a1a"),("0x1a0d1a","0x2d1b2d")]
-    r1, _ = renkler[i % len(renkler)]
+    # Yedek: koyu gradient
+    renkler = ["0x1a1a2e","0x2d1b00","0x0d1b0d","0x1a0000","0x1a0d1a"]
+    renk = renkler[i % len(renkler)]
     subprocess.run(["ffmpeg","-y","-f","lavfi",
-        "-i",f"color=c={r1}:size=1920x1080:rate=1",
+        "-i",f"color=c={renk}:size=1920x1080:rate=1",
         "-vframes","1","-q:v","2",str(yol)], capture_output=True)
-    tg(f"Gorsel {i+1} yedek", "⚠")
+    tg(f"Gorsel {i+1} yedek (Pollinations erisim yok)", "⚠")
     return str(yol)
 
 def gorseller_uret(promptlar):
     from concurrent.futures import ThreadPoolExecutor, as_completed
     n = len(promptlar)
-    # Max 3 paralel - rate limit olmadan hizli
-    max_w = min(3, n)
-    tg(f"{n} gorsel indiriliyor ({max_w} paralel)\n⏳ Tahmini: ~{max(2, n//max_w)} dk", "🎨")
-
+    # 50 resim icin max 3 paralel (rate limit olmadan)
+    max_w = 3
+    tg(f"{n} gorsel indiriliyor ({max_w} paralel)\n⏳ Tahmini: ~{max(3, n//max_w*1)} dk", "🎨")
     sonuclar = {}
     with ThreadPoolExecutor(max_workers=max_w) as ex:
         isler = {ex.submit(gorsel_indir, i, p, n): i for i, p in enumerate(promptlar)}
@@ -334,14 +390,11 @@ def gorseller_uret(promptlar):
             try:
                 sonuclar[idx] = f.result()
             except Exception as e:
-                tg(f"Gorsel {idx+1} hata: {str(e)[:40]}", "⚠")
-                # Yedek
                 yol = WORK / f"img_{idx+1:02d}.jpg"
                 subprocess.run(["ffmpeg","-y","-f","lavfi",
                     "-i","color=c=0x1a1a2e:size=1920x1080:rate=1",
                     "-vframes","1",str(yol)], capture_output=True)
                 sonuclar[idx] = str(yol)
-
     return [sonuclar[i] for i in range(n)]
 
 # ─── THUMBNAİL ───────────────────────────────────────────────────────────────
@@ -675,7 +728,14 @@ def main():
             json.dumps(icerik, ensure_ascii=False, indent=2))
 
         muzik = muzik_uret(p["konu"], p["sure"] * 60 + 120)
-        gorseller = gorseller_uret(icerik["gorseller"])
+        # gorseller yoksa varsayilan prompt uret
+        gorsel_promptlar = icerik.get("gorseller", [])
+        if not gorsel_promptlar:
+            gorsel_promptlar = [f"{p['konu']} dramatic cinematic historical scene {i+1} ultra detailed 8k"
+                                for i in range(p["resim"])]
+        while len(gorsel_promptlar) < p["resim"]:
+            gorsel_promptlar.append(f"{p['konu']} epic cinematic scene {len(gorsel_promptlar)+1}")
+        gorseller = gorseller_uret(gorsel_promptlar)
         thumb = thumbnail_uret(
             icerik["thumbnail_prompt"], icerik["thumbnail_metin"],
             icerik.get("renk", "#1a1a2e"), p["konu"]
