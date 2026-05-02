@@ -711,8 +711,12 @@ def main():
         video_aramalar=icerik.get("video_aramalar",[])
         video_klipleri=videolar_indir(video_aramalar[:p["video_sayisi"]]) if p["video_sayisi"]>0 else []
 
-        thumb=thumbnail_uret(icerik["thumbnail_prompt"],icerik["thumbnail_metin"],
-                             icerik.get("renk","#1a1a2e"),p["konu"])
+        thumb=thumbnail_uret(
+            icerik.get("thumbnail_prompt", f"{p['konu']} epic dramatic cinematic"),
+            icerik.get("thumbnail_metin", p['konu'].upper()[:15]),
+            icerik.get("renk","#1a1a2e"),
+            p["konu"]
+        )
         ses,sure,altyazi=ses_uret(icerik["senaryo"])
         miksli=ses_miksle(ses,muzik,sure)
         video=video_montaj(gorseller,video_klipleri,miksli,altyazi,sure)
