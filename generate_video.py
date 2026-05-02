@@ -708,8 +708,11 @@ def main():
         ses,sure,altyazi=ses_uret(icerik["senaryo"])
         miksli=ses_miksle(ses,muzik,sure)
         video=video_montaj(gorseller,video_klipleri,miksli,altyazi,sure)
-        vid_url,_=youtube_yukle(video,thumb,icerik["baslik"],icerik["aciklama"],
-                                 icerik["etiketler"],p["yayin_iso"])
+        vid_url,_=youtube_yukle(video,thumb,
+            icerik.get("baslik", p["konu"]+" Belgeseli"),
+            icerik.get("aciklama", p["konu"]+" belgeseli. #belgesel #tarih"),
+            icerik.get("etiketler", [p["konu"],"belgesel","tarih","youtube"]),
+            p["yayin_iso"])
 
         tg(f"<b>TAMAMLANDI!</b>\n\n<b>{icerik['baslik']}</b>\n\n{vid_url}\n\n"
            f"Yayin: <b>{p['yayin_dt'].strftime('%d.%m.%Y %H:%M')}</b>","🎉")
