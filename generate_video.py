@@ -183,45 +183,37 @@ JSON:
             "thumbnail_prompt": f"{konu} epic dramatic", "renk": "#1a1a2e"
         }
 
-    # ADIM 2: Senaryo bölümler halinde
-    tg(f"Senaryo yaziliyor ({kelime_hedef} kelime, {sure//5} bolum)...", "📝")
-    bolum_sayisi = max(3, sure // 5)
-    bolum_kelime = kelime_hedef // bolum_sayisi
-    tum_bolumler = []
+    # ADIM 2: Tum senaryoyu tek seferde yaz
+    tg(f"Senaryo yaziliyor ({kelime_hedef} kelime)...", "📝")
 
-    for b in range(bolum_sayisi):
-        if b == 0: yon = "Carpici giris, izleyiciyi aninda cek"
-        elif b == bolum_sayisi-1: yon = "Guclu kapanis ve degerlendirme"
-        else: yon = f"{konu} konusunun {b}. ana konusu - detayli bilgi"
+    prompt2 = f"""Turkce YouTube belgesel senaryosu. Konu: {konu}. Sure: {sure} dakika.
+Tam {kelime_hedef} kelime Turkce duz metin yaz.
+Kural: Apostrof yok, emoji yok, gorsel notu yok, baslik yok, sadece duz anlatim.
+Uzun ve detayli yaz, {sure} dakikayi dolduracak kadar."""
 
-        onceki = tum_bolumler[-1][-200:] if tum_bolumler else ""
-        baglam = f'Onceki bolum sonu: "{onceki}"\nDevam et.\n\n' if onceki else ""
+    senaryo = ""
+    for _ in range(5):
+        try:
+            ham, model = gemini(prompt2, max_tokens=8192)
+            ham = re.sub(r'\[.*?\]|\*+|^#+\s.*$', '', ham, flags=re.DOTALL|re.MULTILINE)
+            ham = re.sub(r'\n{3,}', '\n\n', ham).strip()
+            kelime = len(ham.split())
+            if kelime > 200:
+                senaryo = ham
+                tg(f"Senaryo hazir ({model}): <b>{kelime} kelime</b>", "✅")
+                break
+            time.sleep(5)
+        except Exception as e:
+            tg(f"Senaryo hatasi: {str(e)[:60]}", "⚠")
+            time.sleep(15)
 
-        pb = f"""{baglam}YouTube belgesel. Konu: {konu}. {yon}.
-{bolum_kelime} kelimelik Turkce duz metin.
-Apostrof yok, emoji yok, gorsel notu yok, sadece anlatim."""
-
-        for _ in range(3):
-            try:
-                ham, _ = gemini(pb, max_tokens=8192)
-                ham = re.sub(r'\[.*?\]|\*+|^#+\s.*$', '', ham, flags=re.DOTALL|re.MULTILINE)
-                ham = re.sub(r'\n{3,}', '\n\n', ham).strip()
-                if len(ham.split()) > 100:
-                    tum_bolumler.append(ham)
-                    tg(f"Bolum {b+1}/{bolum_sayisi}: {len(ham.split())} kelime", "✅")
-                    break
-                time.sleep(5)
-            except Exception as e:
-                tg(f"Bolum {b+1} hatasi: {str(e)[:50]}", "⚠"); time.sleep(10)
-
-    senaryo = "\n\n".join(tum_bolumler)
     if not senaryo:
-        senaryo = f"{konu} tarihin en onemli konularindan biridir."
+        senaryo = f"{konu} tarihin en onemli konularindan biridir. Bu belgeselde bu konuyu ele alacagiz."
+        tg("Senaryo yedek metin", "⚠")
 
-    # Telaffuz düzelt
     senaryo = telaffuz_duzenle(senaryo)
     meta["senaryo"] = senaryo
-    tg(f"Senaryo: <b>{len(senaryo.split())} kelime</b> (~{len(senaryo.split())//130} dk)", "📊")
+    tg(f"Toplam: <b>{len(senaryo.split())} kelime</b>", "📊")
     return meta
 
 # ─── MÜZİK (PYTHON WAV) ──────────────────────────────────────────────────────
