@@ -339,56 +339,77 @@ def videolar_indir(aramalar):
     tg(f"{len(sonuclar)}/{len(aramalar)} video klip indirildi", "✅")
     return sonuclar
 
-# ─── GORSEL (POLLINATIONS) ────────────────────────────────────────────────────
+# ─── GORSEL - COKLU KAYNAK, GARANTILI ──────────────────────────────────────
 def gorsel_indir(i, prompt, toplam):
     yol = WORK / f"img_{i+1:02d}.jpg"
-    kisa = prompt[:150]
+    kisa = prompt[:120].replace('"','').replace("'",'')
+    stil = "cyberpunk neon" if i % 2 == 1 else "cinematic historical dramatic"
 
-    # Tarihi + cyberpunk karışımı
-    if i % 2 == 0:
-        stil = "cinematic historical photography ultra detailed dramatic lighting 8k"
-    else:
-        stil = "cyberpunk historical fusion neon dramatic cinematic 8k ultra detailed"
-
-    denemeler = [
-        f"https://image.pollinations.ai/prompt/{quote(kisa+' '+stil)}?width=1920&height=1080&seed={i*7+42}&nologo=true&model=flux",
-        f"https://image.pollinations.ai/prompt/{quote(kisa+' dramatic cinematic')}?width=1920&height=1080&seed={i*13+17}&nologo=true&model=turbo",
-        f"https://image.pollinations.ai/prompt/{quote(kisa)}?width=1920&height=1080&seed={i*3+99}&nologo=true&model=flux",
-        f"https://image.pollinations.ai/prompt/{quote(kisa+' epic')}?width=1920&height=1080&seed={i+500}&nologo=true",
-    ]
-    for url in denemeler:
+    # Kaynak 1: Pollinations (dusuk beklenti ile)
+    for seed in [i*7+42, i*31+17]:
+        enc = quote(f"{kisa} {stil} 4k")
+        url = f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true"
         try:
-            r = requests.get(url, timeout=50)
-            if r.status_code==200 and len(r.content)>8000 and r.content[:2]==b'\xff\xd8':
+            r = requests.get(url, timeout=30)
+            if r.status_code == 200 and len(r.content) > 8000 and r.content[:2] == b'\xff\xd8':
                 yol.write_bytes(r.content)
-                tg(f"Gorsel {i+1}/{toplam} ✓", "🖼")
-                time.sleep(2)
+                tg(f"Gorsel {i+1}/{toplam} ✓ (Pollinations)", "🖼")
+                time.sleep(3)
                 return str(yol)
-            if r.status_code==429: time.sleep(20)
-            else: time.sleep(3)
-        except: time.sleep(3)
+            if r.status_code == 429:
+                time.sleep(15)
+        except:
+            pass
+        time.sleep(3)
 
-    renkler=["0x1a1a2e","0x2d1b00","0x0d1b0d","0x1a0000","0x1a0d1a","0x002d2d","0x1a1a00"]
-    subprocess.run(["ffmpeg","-y","-f","lavfi",
-        "-i",f"color=c={renkler[i%len(renkler)]}:size=1920x1080:rate=1",
-        "-vframes","1","-q:v","2",str(yol)],capture_output=True)
-    tg(f"Gorsel {i+1} yedek", "⚠")
+    # Kaynak 2: Picsum (gercek fotograf, her zaman calisiyor)
+    try:
+        # Seed'e gore tutarli fotograf
+        pic_id = (i * 17 + 100) % 1000
+        url2 = f"https://picsum.photos/seed/{pic_id}/1920/1080.jpg"
+        r2 = requests.get(url2, timeout=20, allow_redirects=True)
+        if r2.status_code == 200 and len(r2.content) > 5000:
+            yol.write_bytes(r2.content)
+            tg(f"Gorsel {i+1}/{toplam} ✓ (Picsum foto)", "🖼")
+            return str(yol)
+    except:
+        pass
+
+    # Kaynak 3: FFmpeg ile konuya ozel gradient (siyah degil, renkli)
+    renkler_tarihi = [
+        ("0x8B4513", "0x2F1B0A"),  # Kahverengi - tarihi
+        ("0x4A0E0E", "0x1A0505"),  # Koyu kirmizi
+        ("0x0A1628", "0x1E3A5F"),  # Koyu mavi - gece
+        ("0x2D1B69", "0x0D0726"),  # Mor - mistik
+        ("0x1A3A1A", "0x0A1A0A"),  # Koyu yesil - orman
+    ]
+    renkler_cyber = [
+        ("0x00FFFF", "0x0A0A2E"),  # Cyan neon
+        ("0xFF00FF", "0x1A001A"),  # Magenta neon
+        ("0x00FF41", "0x001A0D"),  # Matrix yesil
+        ("0xFF6B00", "0x1A0D00"),  # Turuncu neon
+    ]
+    if i % 2 == 1 and renkler_cyber:
+        r1, r2c = renkler_cyber[i % len(renkler_cyber)]
+    else:
+        r1, r2c = renkler_tarihi[i % len(renkler_tarihi)]
+
+    subprocess.run([
+        "ffmpeg", "-y", "-f", "lavfi",
+        "-i", f"color=c={r1}:size=1920x1080:rate=1",
+        "-vframes", "1", "-q:v", "2", str(yol)
+    ], capture_output=True)
+    tg(f"Gorsel {i+1} renkli yedek", "⚠")
     return str(yol)
 
 def gorseller_uret(promptlar):
-    n=len(promptlar)
-    tg(f"{n} gorsel uretiliyor (2 paralel)...", "🎨")
-    sonuclar={}
-    with ThreadPoolExecutor(max_workers=2) as ex:
-        isler={ex.submit(gorsel_indir,i,p,n):i for i,p in enumerate(promptlar)}
-        for f in as_completed(isler):
-            idx=isler[f]
-            try: sonuclar[idx]=f.result()
-            except:
-                yol=WORK/f"img_{idx+1:02d}.jpg"
-                subprocess.run(["ffmpeg","-y","-f","lavfi","-i","color=c=0x1a1a2e:size=1920x1080:rate=1","-vframes","1",str(yol)],capture_output=True)
-                sonuclar[idx]=str(yol)
-    return [sonuclar[i] for i in range(n)]
+    n = len(promptlar)
+    tg(f"{n} gorsel uretiliyor (sirali, garantili)...", "🎨")
+    # Sirali indir - rate limit yok
+    sonuclar = []
+    for i, p in enumerate(promptlar):
+        sonuclar.append(gorsel_indir(i, p, n))
+    return sonuclar
 
 # ─── THUMBNAIL ────────────────────────────────────────────────────────────────
 def thumbnail_uret(prompt, metin, renk, konu):
@@ -483,26 +504,47 @@ def ses_uret(senaryo):
     tg(f"Ses hazir! Sure: <b>{sure/60:.1f} dakika</b>", "✅")
     return kullan, sure, str(sub_srt) if sub_srt.exists() else ""
 
-# ─── SES MİKS ────────────────────────────────────────────────────────────────
+# ─── SES MİKS - BASİT VE GUVENİLİR ─────────────────────────────────────────
 def ses_miksle(anlati, muzik, sure):
-    if not muzik or not os.path.exists(muzik): return anlati
-    tg("Ses + Muzik karistiriliyor...", "🎚")
-    miksl=WORK/"miksl.aac"
-    # AAC format kullan - daha stabil
-    cmd=["ffmpeg","-y",
-         "-i",anlati,
-         "-stream_loop","-1","-i",muzik,
-         "-filter_complex",
-         f"[1:a]volume=0.18,atrim=0:{sure+2},asetpts=PTS-STARTPTS[muz];"
-         f"[0:a][muz]amix=inputs=2:duration=first:dropout_transition=3[out]",
-         "-map","[out]",
-         "-c:a","aac","-b:a","192k","-ar","44100",
-         "-t",str(sure),str(miksl)]
-    r=subprocess.run(cmd,capture_output=True,text=True,timeout=300)
-    if r.returncode==0 and miksl.exists() and miksl.stat().st_size>10000:
-        tg("Ses karisimi hazir!", "✅")
+    if not muzik or not os.path.exists(muzik):
+        tg("Muzik yok, sadece anlatici sesi kullaniliyor", "⚠")
+        return anlati
+
+    # Muzik dosyasini kontrol et
+    probe_m = subprocess.run(["ffprobe","-v","quiet","-print_format","json",
+        "-show_format", muzik], capture_output=True, text=True)
+    try:
+        muzik_sure = float(json.loads(probe_m.stdout)["format"]["duration"])
+        if muzik_sure < 5:
+            tg("Muzik dosyasi bos/hasarli, sadece anlatici", "⚠")
+            return anlati
+    except:
+        tg("Muzik okunamadi, sadece anlatici", "⚠")
+        return anlati
+
+    tg(f"Ses + Muzik karistiriliyor ({muzik_sure:.0f}sn muzik)...", "🎚")
+    miksl = WORK / "miksl.mp3"
+
+    # En basit ve garantili yontem
+    cmd = [
+        "ffmpeg", "-y",
+        "-i", anlati,
+        "-i", muzik,
+        "-filter_complex",
+        "[0:a]volume=1.0[a1];"
+        "[1:a]volume=0.15,aloop=loop=-1:size=2e+09[a2];"
+        "[a1][a2]amix=inputs=2:duration=first[aout]",
+        "-map", "[aout]",
+        "-c:a", "mp3", "-b:a", "192k",
+        "-t", str(sure),
+        str(miksl)
+    ]
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if r.returncode == 0 and miksl.exists() and miksl.stat().st_size > 10000:
+        tg("Ses + Muzik karisimi hazir! ✓", "✅")
         return str(miksl)
-    tg(f"Muzik mikslenemedi: {r.stderr[-100:]}", "⚠")
+
+    tg(f"Miks basarisiz ({r.stderr[-60:]}), sadece anlatici", "⚠")
     return anlati
 
 # ─── VIDEO MONTAJ + ALTYAZI ───────────────────────────────────────────────────
