@@ -339,77 +339,45 @@ def videolar_indir(aramalar):
     tg(f"{len(sonuclar)}/{len(aramalar)} video klip indirildi", "✅")
     return sonuclar
 
-# ─── GORSEL - COKLU KAYNAK, GARANTILI ──────────────────────────────────────
+# ─── GORSEL - POLLINATIONS GARANTILI ────────────────────────────────────────
 def gorsel_indir(i, prompt, toplam):
     yol = WORK / f"img_{i+1:02d}.jpg"
     kisa = prompt[:120].replace('"','').replace("'",'')
-    stil = "cyberpunk neon" if i % 2 == 1 else "cinematic historical dramatic"
+    stil = "cyberpunk neon dramatic" if i % 2 == 1 else "cinematic historical dramatic"
 
-    # Kaynak 1: Pollinations (dusuk beklenti ile)
-    for seed in [i*7+42, i*31+17]:
-        enc = quote(f"{kisa} {stil} 4k")
-        url = f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true"
+    # Pollinations - sirali, her biri icin bekle
+    for seed in [i*7+42, i*13+17, i*3+99, i*23+11]:
+        enc = quote(f"{kisa} {stil} 4k ultra detailed")
+        url = f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true&model=flux"
         try:
-            r = requests.get(url, timeout=30)
-            if r.status_code == 200 and len(r.content) > 8000 and r.content[:2] == b'\xff\xd8':
+            r = requests.get(url, timeout=60)
+            if r.status_code == 200 and len(r.content) > 10000 and r.content[:2] == b'\xff\xd8':
                 yol.write_bytes(r.content)
-                tg(f"Gorsel {i+1}/{toplam} ✓ (Pollinations)", "🖼")
-                time.sleep(3)
+                tg(f"Gorsel {i+1}/{toplam} ✓", "🖼")
+                time.sleep(4)  # Rate limit
                 return str(yol)
             if r.status_code == 429:
-                time.sleep(15)
+                tg(f"Gorsel {i+1} rate limit, 30s...", "⏳")
+                time.sleep(30)
+            else:
+                time.sleep(5)
         except:
-            pass
-        time.sleep(3)
+            time.sleep(5)
 
-    # Kaynak 2: Picsum (gercek fotograf, her zaman calisiyor)
-    try:
-        # Seed'e gore tutarli fotograf
-        pic_id = (i * 17 + 100) % 1000
-        url2 = f"https://picsum.photos/seed/{pic_id}/1920/1080.jpg"
-        r2 = requests.get(url2, timeout=20, allow_redirects=True)
-        if r2.status_code == 200 and len(r2.content) > 5000:
-            yol.write_bytes(r2.content)
-            tg(f"Gorsel {i+1}/{toplam} ✓ (Picsum foto)", "🖼")
-            return str(yol)
-    except:
-        pass
-
-    # Kaynak 3: FFmpeg ile konuya ozel gradient (siyah degil, renkli)
-    renkler_tarihi = [
-        ("0x8B4513", "0x2F1B0A"),  # Kahverengi - tarihi
-        ("0x4A0E0E", "0x1A0505"),  # Koyu kirmizi
-        ("0x0A1628", "0x1E3A5F"),  # Koyu mavi - gece
-        ("0x2D1B69", "0x0D0726"),  # Mor - mistik
-        ("0x1A3A1A", "0x0A1A0A"),  # Koyu yesil - orman
-    ]
-    renkler_cyber = [
-        ("0x00FFFF", "0x0A0A2E"),  # Cyan neon
-        ("0xFF00FF", "0x1A001A"),  # Magenta neon
-        ("0x00FF41", "0x001A0D"),  # Matrix yesil
-        ("0xFF6B00", "0x1A0D00"),  # Turuncu neon
-    ]
-    if i % 2 == 1 and renkler_cyber:
-        r1, r2c = renkler_cyber[i % len(renkler_cyber)]
-    else:
-        r1, r2c = renkler_tarihi[i % len(renkler_tarihi)]
-
-    subprocess.run([
-        "ffmpeg", "-y", "-f", "lavfi",
-        "-i", f"color=c={r1}:size=1920x1080:rate=1",
-        "-vframes", "1", "-q:v", "2", str(yol)
-    ], capture_output=True)
-    tg(f"Gorsel {i+1} renkli yedek", "⚠")
+    # Yedek: konuya ozel koyu renk (siyah degil)
+    renkler_tarihi = ["0x8B4513","0x4A0E0E","0x0A1628","0x2D1B69","0x1A3A1A"]
+    renkler_cyber  = ["0x003333","0x330033","0x003300","0x332200"]
+    renk = renkler_cyber[i%4] if i%2==1 else renkler_tarihi[i%5]
+    subprocess.run(["ffmpeg","-y","-f","lavfi",
+        "-i",f"color=c={renk}:size=1920x1080:rate=1",
+        "-vframes","1","-q:v","2",str(yol)], capture_output=True)
+    tg(f"Gorsel {i+1} yedek renk", "⚠")
     return str(yol)
 
 def gorseller_uret(promptlar):
     n = len(promptlar)
-    tg(f"{n} gorsel uretiliyor (sirali, garantili)...", "🎨")
-    # Sirali indir - rate limit yok
-    sonuclar = []
-    for i, p in enumerate(promptlar):
-        sonuclar.append(gorsel_indir(i, p, n))
-    return sonuclar
+    tg(f"{n} gorsel uretiliyor (sirali, konuya ozel)...", "🎨")
+    return [gorsel_indir(i, p, n) for i, p in enumerate(promptlar)]
 
 # ─── THUMBNAIL ────────────────────────────────────────────────────────────────
 def thumbnail_uret(prompt, metin, renk, konu):
@@ -479,7 +447,7 @@ def ses_uret(senaryo):
         "volume=1.3","-c:a","mp3","-b:a","192k",str(ff)],capture_output=True)
     kullan=str(ff) if ff.exists() else str(rf)
 
-    # VTT → SRT donustur
+    # VTT → SRT donustur (satir numarasiz)
     if sub_vtt.exists():
         vtt_icerik = sub_vtt.read_text(encoding="utf-8")
         srt_satirlar = []
@@ -489,8 +457,14 @@ def ses_uret(senaryo):
                 satirlar = blok.strip().split('\n')
                 zaman_satiri = next((s for s in satirlar if '-->' in s), None)
                 if zaman_satiri:
-                    zaman_satiri = zaman_satiri.replace('.', ',')
-                    metin_satirlari = [s for s in satirlar if '-->' not in s and s.strip() and not s.startswith('NOTE')]
+                    # Milisaniye nokta → virgul (SRT formatı)
+                    zaman_satiri = re.sub(r'(\d{2}:\d{2}:\d{2})\.(\d{3})', r'\1,\2', zaman_satiri)
+                    # Sadece zaman kısmını al
+                    zaman_satiri = zaman_satiri.strip()
+                    metin_satirlari = [s for s in satirlar
+                                      if '-->' not in s and s.strip()
+                                      and not s.startswith('NOTE')
+                                      and not s.strip().isdigit()]
                     if metin_satirlari:
                         srt_satirlar.append(str(sayac))
                         srt_satirlar.append(zaman_satiri)
@@ -504,47 +478,37 @@ def ses_uret(senaryo):
     tg(f"Ses hazir! Sure: <b>{sure/60:.1f} dakika</b>", "✅")
     return kullan, sure, str(sub_srt) if sub_srt.exists() else ""
 
-# ─── SES MİKS - BASİT VE GUVENİLİR ─────────────────────────────────────────
+# ─── SES MİKS ────────────────────────────────────────────────────────────────
 def ses_miksle(anlati, muzik, sure):
     if not muzik or not os.path.exists(muzik):
-        tg("Muzik yok, sadece anlatici sesi kullaniliyor", "⚠")
+        tg("Muzik yok, sadece anlatici", "⚠")
         return anlati
-
-    # Muzik dosyasini kontrol et
-    probe_m = subprocess.run(["ffprobe","-v","quiet","-print_format","json",
-        "-show_format", muzik], capture_output=True, text=True)
     try:
-        muzik_sure = float(json.loads(probe_m.stdout)["format"]["duration"])
-        if muzik_sure < 5:
-            tg("Muzik dosyasi bos/hasarli, sadece anlatici", "⚠")
+        p = subprocess.run(["ffprobe","-v","quiet","-print_format","json",
+            "-show_format",muzik],capture_output=True,text=True)
+        if float(json.loads(p.stdout)["format"]["duration"]) < 5:
             return anlati
     except:
-        tg("Muzik okunamadi, sadece anlatici", "⚠")
         return anlati
 
-    tg(f"Ses + Muzik karistiriliyor ({muzik_sure:.0f}sn muzik)...", "🎚")
-    miksl = WORK / "miksl.mp3"
-
-    # En basit ve garantili yontem
-    cmd = [
-        "ffmpeg", "-y",
-        "-i", anlati,
-        "-i", muzik,
-        "-filter_complex",
-        "[0:a]volume=1.0[a1];"
-        "[1:a]volume=0.15,aloop=loop=-1:size=2e+09[a2];"
-        "[a1][a2]amix=inputs=2:duration=first[aout]",
-        "-map", "[aout]",
-        "-c:a", "mp3", "-b:a", "192k",
-        "-t", str(sure),
-        str(miksl)
-    ]
-    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
-    if r.returncode == 0 and miksl.exists() and miksl.stat().st_size > 10000:
-        tg("Ses + Muzik karisimi hazir! ✓", "✅")
+    tg("Ses + Muzik karistiriliyor...", "🎚")
+    miksl = WORK/"miksl.mp3"
+    # En basit yontem: iki sesi farkli volume ile cak
+    cmd = ["ffmpeg","-y",
+           "-i", anlati,
+           "-i", muzik,
+           "-filter_complex",
+           "[0:a]volume=1.0[v1];"
+           "[1:a]volume=0.15,aloop=loop=-1:size=2e+09,atrim=0:"+str(int(sure)+5)+"[v2];"
+           "[v1][v2]amix=inputs=2:duration=first[out]",
+           "-map","[out]",
+           "-c:a","mp3","-b:a","192k","-t",str(sure),
+           str(miksl)]
+    r = subprocess.run(cmd,capture_output=True,text=True,timeout=300)
+    if r.returncode==0 and miksl.exists() and miksl.stat().st_size>10000:
+        tg("Muzik eklendi!", "✅")
         return str(miksl)
-
-    tg(f"Miks basarisiz ({r.stderr[-60:]}), sadece anlatici", "⚠")
+    tg("Miks hatasi, sadece anlatici", "⚠")
     return anlati
 
 # ─── VIDEO MONTAJ + ALTYAZI ───────────────────────────────────────────────────
@@ -627,9 +591,9 @@ def video_montaj(gorseller, video_klipleri, ses, altyazi_srt, toplam_sure):
         tg("Altyazi ekleniyor (sari, siyah cerceve)...", "📝")
         safe_srt = os.path.abspath(altyazi_srt).replace('\\','/').replace(':','\\:')
         vf_sub = (f"subtitles='{safe_srt}':force_style='"
-                  "FontName=DejaVu Sans,FontSize=22,PrimaryColour=&H00FFFF00,"
+                  "FontName=DejaVu Sans,FontSize=14,PrimaryColour=&H00FFFF00,"
                   "OutlineColour=&H00000000,BackColour=&H80000000,"
-                  "Bold=1,Outline=2,Shadow=1,Alignment=2'")
+                  "Bold=1,Outline=2,Shadow=1,Alignment=2,MarginV=30'")
         cmd_sub=["ffmpeg","-y","-i",str(cikis),"-vf",vf_sub,
                  "-c:v","libx264","-preset","fast","-crf","22",
                  "-c:a","copy",str(cikis_son)]
