@@ -339,45 +339,77 @@ def videolar_indir(aramalar):
     tg(f"{len(sonuclar)}/{len(aramalar)} video klip indirildi", "✅")
     return sonuclar
 
-# ─── GORSEL - POLLINATIONS GARANTILI ────────────────────────────────────────
-def gorsel_indir(i, prompt, toplam):
-    yol = WORK / f"img_{i+1:02d}.jpg"
-    kisa = prompt[:120].replace('"','').replace("'",'')
-    stil = "cyberpunk neon dramatic" if i % 2 == 1 else "cinematic historical dramatic"
+# ─── GORSEL - 50/50 POLLINATIONS + PICSUM (KONUYA UYGUN) ────────────────────
+# Picsum kategori ID'leri - konuya gore
+PICSUM_KATEGORILER = {
+    "savas":      [11, 26, 42, 76, 83, 110, 159, 177, 193, 240],
+    "tarih":      [10, 22, 27, 30, 37, 45, 50, 64, 91, 130],
+    "doga":       [12, 14, 18, 20, 24, 33, 35, 40, 57, 65],
+    "sehir":      [13, 15, 17, 19, 29, 55, 59, 60, 70, 75],
+    "deniz":      [16, 25, 28, 43, 53, 68, 77, 88, 99, 120],
+    "uzay":       [11, 42, 83, 110, 159, 177, 193, 240, 250, 260],
+    "karanlik":   [26, 42, 76, 83, 100, 110, 150, 200, 210, 220],
+    "varsayilan": [10, 11, 12, 13, 14, 15, 16, 17, 18, 19],
+}
 
-    # Pollinations - sirali, her biri icin bekle
-    for seed in [i*7+42, i*13+17, i*3+99, i*23+11]:
+def picsum_kategori_sec(konu):
+    """Konuya gore uygun Picsum kategori sec"""
+    k = konu.lower()
+    for c,r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]:
+        k = k.replace(c,r)
+    if any(x in k for x in ["savas","viking","osmanli","roma","selcuklu","savasc"]): return PICSUM_KATEGORILER["savas"]
+    if any(x in k for x in ["tarih","antik","misir","yunan","sumer","babil"]): return PICSUM_KATEGORILER["tarih"]
+    if any(x in k for x in ["doga","orman","bitki","hayvan"]): return PICSUM_KATEGORILER["doga"]
+    if any(x in k for x in ["sehir","teknoloji","yapay","robot","gelecek"]): return PICSUM_KATEGORILER["sehir"]
+    if any(x in k for x in ["deniz","okyanus","su","balik"]): return PICSUM_KATEGORILER["deniz"]
+    if any(x in k for x in ["uzay","gezegen","yildiz","evren"]): return PICSUM_KATEGORILER["uzay"]
+    if any(x in k for x in ["gizem","korku","karanlik","paranormal"]): return PICSUM_KATEGORILER["karanlik"]
+    return PICSUM_KATEGORILER["varsayilan"]
+
+def gorsel_indir(i, prompt, toplam, konu=""):
+    yol = WORK / f"img_{i+1:02d}.jpg"
+    kisa = prompt[:100].replace('"','').replace("'",'')
+    stil = "cyberpunk neon dramatic lighting" if i % 2 == 1 else "cinematic historical dramatic lighting"
+
+    if i % 2 == 0:
+        # Cift index: Pollinations (AI gorsel)
         enc = quote(f"{kisa} {stil} 4k ultra detailed")
-        url = f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true&model=flux"
+        url = f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={i*7+42}&nologo=true&model=flux"
         try:
-            r = requests.get(url, timeout=60)
+            r = requests.get(url, timeout=25)
             if r.status_code == 200 and len(r.content) > 10000 and r.content[:2] == b'\xff\xd8':
                 yol.write_bytes(r.content)
-                tg(f"Gorsel {i+1}/{toplam} ✓", "🖼")
-                time.sleep(4)  # Rate limit
+                tg(f"Gorsel {i+1}/{toplam} ✓ (AI-Pollinations)", "🖼")
                 return str(yol)
-            if r.status_code == 429:
-                tg(f"Gorsel {i+1} rate limit, 30s...", "⏳")
-                time.sleep(30)
-            else:
-                time.sleep(5)
         except:
-            time.sleep(5)
+            pass
+        tg(f"Gorsel {i+1} Pollinations basarisiz, Picsum'a gec", "⚠")
+    # Tek index veya Pollinations basarisiz: Picsum (gercek fotograf)
+    ids = picsum_kategori_sec(konu)
+    pic_id = ids[i % len(ids)]
+    try:
+        url2 = f"https://picsum.photos/id/{pic_id}/1920/1080.jpg"
+        r2 = requests.get(url2, timeout=20, allow_redirects=True)
+        if r2.status_code == 200 and len(r2.content) > 5000:
+            yol.write_bytes(r2.content)
+            tg(f"Gorsel {i+1}/{toplam} ✓ (Picsum-konuya uygun)", "🖼")
+            return str(yol)
+    except:
+        pass
 
-    # Yedek: konuya ozel koyu renk (siyah degil)
-    renkler_tarihi = ["0x8B4513","0x4A0E0E","0x0A1628","0x2D1B69","0x1A3A1A"]
-    renkler_cyber  = ["0x003333","0x330033","0x003300","0x332200"]
-    renk = renkler_cyber[i%4] if i%2==1 else renkler_tarihi[i%5]
+    # Son yedek: renkli arka plan
+    renkler = ["0x8B4513","0x4A0E0E","0x0A1628","0x2D1B69","0x003333","0x330033"]
+    renk = renkler[i % len(renkler)]
     subprocess.run(["ffmpeg","-y","-f","lavfi",
         "-i",f"color=c={renk}:size=1920x1080:rate=1",
         "-vframes","1","-q:v","2",str(yol)], capture_output=True)
     tg(f"Gorsel {i+1} yedek renk", "⚠")
     return str(yol)
 
-def gorseller_uret(promptlar):
+def gorseller_uret(promptlar, konu=""):
     n = len(promptlar)
-    tg(f"{n} gorsel uretiliyor (sirali, konuya ozel)...", "🎨")
-    return [gorsel_indir(i, p, n) for i, p in enumerate(promptlar)]
+    tg(f"{n} gorsel uretiliyor (50% AI + 50% gercek foto, konuya uygun)...", "🎨")
+    return [gorsel_indir(i, p, n, konu) for i, p in enumerate(promptlar)]
 
 # ─── THUMBNAIL ────────────────────────────────────────────────────────────────
 def thumbnail_uret(prompt, metin, renk, konu):
@@ -670,7 +702,7 @@ def main():
         gorsel_promptlar=icerik.get("gorseller",[])
         while len(gorsel_promptlar)<p["resim"]:
             gorsel_promptlar.append(f"{p['konu']} dramatic historical cinematic scene {len(gorsel_promptlar)+1} 8k")
-        gorseller=gorseller_uret(gorsel_promptlar)
+        gorseller=gorseller_uret(gorsel_promptlar, p["konu"])
 
         video_aramalar=icerik.get("video_aramalar",[])
         video_klipleri=videolar_indir(video_aramalar[:p["video_sayisi"]]) if p["video_sayisi"]>0 else []
