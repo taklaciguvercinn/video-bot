@@ -152,24 +152,47 @@ def muzik_uret(konu,sure_sn):
 
 def gorsel_indir(i,prompt,toplam):
     yol=WORK/f"img_{i+1:02d}.jpg"
-    kisa=prompt[:120].replace('"','').replace("'",'')
-    for seed in [i*7+42,i*13+17,i*3+99]:
-        enc=quote(f"{kisa}, ultra detailed 4k cinematic")
-        url=f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true&model=flux"
+    kisa=prompt[:100].replace('"','').replace("'",'')
+    # Her gorsel icin 3 farkli deneme
+    for deneme,(seed,model) in enumerate([(i*7+42,"flux"),(i*13+17,"turbo"),(i*3+99,"flux")]):
+        enc=quote(f"{kisa}, cinematic 4k dramatic")
+        url=f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true&model={model}"
         try:
-            r=requests.get(url,timeout=60)
+            r=requests.get(url,timeout=90)
             if r.status_code==200 and len(r.content)>10000 and r.content[:2]==b'\xff\xd8':
-                yol.write_bytes(r.content); tg(f"Gorsel {i+1}/{toplam} AI ✓","🖼"); time.sleep(5); return str(yol)
-            if r.status_code==429: time.sleep(20)
-            else: time.sleep(3)
-        except: time.sleep(5)
+                yol.write_bytes(r.content)
+                tg(f"Gorsel {i+1}/{toplam} ✓ (deneme {deneme+1})","🖼")
+                time.sleep(8)  # Sonraki gorsel icin bekle
+                return str(yol)
+            if r.status_code==429:
+                tg(f"Gorsel {i+1} rate limit, 45s...","⏳")
+                time.sleep(45)
+            else:
+                time.sleep(10)
+        except:
+            time.sleep(10)
+    # Yedek
     renkler=["0x3D1C02","0x4A0E0E","0x0A1628","0x2D1B69","0x003333","0x1A3A1A","0x330033","0x1A1A00"]
     subprocess.run(["ffmpeg","-y","-f","lavfi","-i",f"color=c={renkler[i%len(renkler)]}:size=1920x1080:rate=1","-vframes","1","-q:v","2",str(yol)],capture_output=True)
-    tg(f"Gorsel {i+1} yedek","⚠"); return str(yol)
+    tg(f"Gorsel {i+1} yedek renk","⚠")
+    return str(yol)
 
 def gorseller_uret(promptlar):
-    n=len(promptlar); tg(f"{n} gorsel uretiliyor (Pollinations AI)...","🎨")
-    return [gorsel_indir(i,p,n) for i,p in enumerate(promptlar)]
+    from concurrent.futures import ThreadPoolExecutor, as_completed
+    n=len(promptlar)
+    tg(f"{n} gorsel uretiliyor (paralel, her biri bagimsiz)...","🎨")
+    sonuclar={}
+    # Her gorsel bagimsiz thread'de - birbirini engellemez
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        isler={ex.submit(gorsel_indir,i,p,n):i for i,p in enumerate(promptlar)}
+        for f in as_completed(isler):
+            idx=isler[f]
+            try: sonuclar[idx]=f.result()
+            except:
+                yol=WORK/f"img_{idx+1:02d}.jpg"
+                subprocess.run(["ffmpeg","-y","-f","lavfi","-i","color=c=0x1a1a2e:size=1920x1080:rate=1","-vframes","1",str(yol)],capture_output=True)
+                sonuclar[idx]=str(yol)
+    return [sonuclar[i] for i in range(n)]
 
 def thumbnail_uret(prompt,metin,renk,konu):
     tg("Thumbnail uretiliyor...","🖼")
@@ -274,7 +297,7 @@ def video_montaj(gorseller,ses,altyazi_srt,toplam_sure):
         tg("Altyazi ekleniyor (sari, siyah cerceve)...","📝")
         safe=os.path.abspath(altyazi_srt).replace('\\','/').replace(':','\\:')
         vf_sub=f"subtitles='{safe}':force_style='FontName=DejaVu Sans,FontSize=14,PrimaryColour=&H00FFFF00,OutlineColour=&H00000000,Bold=1,Outline=2,Shadow=1,Alignment=2,MarginV=30'"
-        cmd_sub=["ffmpeg","-y","-i",str(cikis),"-vf",vf_sub,"-c:v","libx264","-preset","fast","-crf","22","-c:a","copy",str(cikis_son)]
+        cmd_sub=["ffmpeg","-y","-i",str(cikis),"-vf",vf_sub,"-c:v","libx264","-preset","ultrafast","-crf","26","-c:a","copy",str(cikis_son)]
         r=subprocess.run(cmd_sub,capture_output=True,text=True,timeout=3600)
         if r.returncode==0 and cikis_son.exists(): tg("Altyazi eklendi!","✅")
         else: subprocess.run(["cp",str(cikis),str(cikis_son)])
