@@ -103,8 +103,23 @@ def senaryo_uret(konu,sure,resim_sayisi,video_sayisi):
     senaryo=""
     for _ in range(4):
         try:
-            h,model=gemini(f"Turkce YouTube belgesel. Konu: {konu}. {sure} dk. Tam {kelime} kelime duz Turkce metin. Apostrof yok, emoji yok, gorsel notu yok. National Geographic tarzinda.",max_tokens=8192)
-            h=re.sub(r'\[.*?\]|\*+|^#+\s.*$','',h,flags=re.DOTALL|re.MULTILINE)
+            prompt_s=f"""Sen bir belgesel anlaticisisin. {konu} hakkinda {sure} dakikalik bir belgesel icin metin yazacaksin.
+
+KESIN KURALLAR:
+- Sadece duz Turkce anlatim metni yaz
+- Hicbir sahne yonergesi, muzik notu, anlatici etiketi yazma
+- Parantez icinde hicbir sey olmasin
+- Apostrof kullanma, emoji kullanma
+- Baslik veya alt baslik kullanma
+
+{kelime} kelimelik duz Turkce metin yaz:"""
+            h,model=gemini(prompt_s,max_tokens=8192)
+            for bad in ["Giris Muzigi","Kapanis muzigi","Jenerik","Anlatici:","Kelime Sayimi","Iste bu","Simdi yaziyorum","tarzinda","belgesel metni:"]:
+                h=re.sub(bad,'',h,flags=re.IGNORECASE)
+            h=re.sub(r'\[.*?\]','',h,flags=re.DOTALL)
+            h=re.sub(r'\(.*?\)','',h,flags=re.DOTALL)
+            h=re.sub(r'^#+\s.*$','',h,flags=re.MULTILINE)
+            h=re.sub(r'\*+','',h)
             h=re.sub(r'\n{3,}','\n\n',h).strip()
             if len(h.split())>200: senaryo=h; tg(f"Senaryo hazir ({model}): <b>{len(h.split())} kelime</b>","✅"); break
             time.sleep(5)
@@ -183,7 +198,7 @@ def gorseller_uret(promptlar):
     tg(f"{n} gorsel uretiliyor (paralel, her biri bagimsiz)...","🎨")
     sonuclar={}
     # Her gorsel bagimsiz thread'de - birbirini engellemez
-    with ThreadPoolExecutor(max_workers=n) as ex:
+    with ThreadPoolExecutor(max_workers=3) as ex:
         isler={ex.submit(gorsel_indir,i,p,n):i for i,p in enumerate(promptlar)}
         for f in as_completed(isler):
             idx=isler[f]
@@ -258,7 +273,7 @@ def ses_miksle(anlati,muzik,sure):
     tg("Ses + Muzik karistiriliyor...","🎚")
     miksl=WORK/"miksl.mp3"
     cmd=["ffmpeg","-y","-i",anlati,"-stream_loop","-1","-i",muzik,
-         "-filter_complex","[0:a]volume=1.0[v1];[1:a]volume=0.15,atrim=duration="+str(int(sure)+10)+"[v2];[v1][v2]amix=inputs=2:duration=first[out]",
+         "-filter_complex","[0:a]volume=1.0[v1];[1:a]volume=0.15[v2];[v1][v2]amix=inputs=2:duration=first[out]",
          "-map","[out]","-c:a","mp3","-b:a","192k","-t",str(sure),str(miksl)]
     r=subprocess.run(cmd,capture_output=True,text=True,timeout=600)
     if r.returncode==0 and miksl.exists() and miksl.stat().st_size>10000: tg("Muzik eklendi!","✅"); return str(miksl)
@@ -282,7 +297,7 @@ def video_montaj(gorseller,ses,altyazi_srt,toplam_sure):
         r=subprocess.run(cmd1,capture_output=True,text=True,timeout=300)
         if r.returncode==0 and seg.exists() and seg.stat().st_size>500: segmentler.append(str(seg)); tg(f"Seg {i+1}/{len(gorseller)} ef{ef+1} ok","🎬")
         else:
-            cmd2=["ffmpeg","-y","-loop","1","-t",str(her),"-i",gorsel,"-vf",f"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:-1:-1,fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5","-c:v","libx264","-preset","ultrafast","-crf","28","-an","-pix_fmt","yuv420p",str(seg)]
+            cmd2=["ffmpeg","-y","-loop","1","-t",str(her),"-i",gorsel,"-vf",f"scale=1920:1080:force_original_aspect_ratio=increase,crop=1920:1080,fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5","-c:v","libx264","-preset","ultrafast","-crf","28","-an","-pix_fmt","yuv420p",str(seg)]
             r2=subprocess.run(cmd2,capture_output=True,text=True,timeout=120)
             if r2.returncode==0 and seg.exists(): segmentler.append(str(seg)); tg(f"Seg {i+1} yedek","⚠")
     if not segmentler: raise Exception("Segment olusturulamadi!")
