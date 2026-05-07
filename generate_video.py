@@ -86,10 +86,44 @@ def telaffuz(metin):
 def senaryo_uret(konu,sure,resim_sayisi,video_sayisi):
     tg(f"'{konu}' icin icerik uretiliyor...","📚")
     kelime=sure*160
+    # Konuya ozgu anahtar kelimeler
+    k=konu.lower()
+    for c,r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]: k=k.replace(c,r)
+    
+    mekan_sozlugu = {
+        "cin seddi": ["Great Wall of China ancient stone watchtower","Chinese fortress mountain mist","ancient Chinese battlefield landscape","Ming dynasty stone architecture"],
+        "osmanli": ["Ottoman Empire palace architecture","Byzantine Constantinople cityscape","Ottoman army fortress medieval","Topkapi palace golden era"],
+        "misir": ["ancient Egyptian pyramid Giza desert","Egyptian temple hieroglyphics stone","Nile river ancient civilization","Egyptian pharaoh tomb dark"],
+        "viking": ["Viking longship ocean storm","Norse village wooden houses","Viking battlefield axes shields","Scandinavian fjord dramatic landscape"],
+        "roma": ["ancient Roman Colosseum architecture","Roman legionnaire fortress","Roman aqueduct stone landscape","ancient Rome Forum ruins"],
+        "uzay": ["deep space nebula galaxy","space station orbit Earth","astronaut spacewalk cosmos","alien planet landscape dramatic"],
+        "doga": ["tropical rainforest waterfall","mountain glacier landscape dramatic","ocean waves cliffs dramatic","ancient forest mystical fog"],
+    }
+    
+    # Konuya uyan mekan promptlarini bul
+    bulunan = []
+    for anahtar, promptlar in mekan_sozlugu.items():
+        if anahtar in k:
+            bulunan = promptlar
+            break
+    
+    if not bulunan:
+        # Genel tarihi mimari
+        bulunan = [
+            f"ancient {konu} landscape dramatic architecture no people",
+            f"historical {konu} ruins stone dramatic lighting no people",
+            f"epic {konu} environment cinematic landscape",
+            f"mystical {konu} ancient site dramatic atmosphere",
+        ]
+    
     gorseller=[]
     for i in range(resim_sayisi):
-        if i%2==0: gorseller.append(f"{konu} historical dramatic cinematic scene {i+1}, ancient architecture, epic golden hour lighting, ultra detailed 8k photography")
-        else: gorseller.append(f"{konu} dramatic powerful scene {i+1}, dark moody atmosphere, cinematic composition, ultra detailed 8k")
+        base = bulunan[i % len(bulunan)]
+        if i % 3 == 2:
+            base += ", aerial view, wide shot, dramatic clouds"
+        elif i % 3 == 1:
+            base += ", close up detail, dramatic shadow, golden hour"
+        gorseller.append(base)
     meta={"baslik":f"{konu}: Tarihin Gizli Sirri!","aciklama":f"{konu} hakkinda kapsamli Turkce belgesel. #belgesel #tarih #{konu.replace(' ','')}","etiketler":[konu,"belgesel","tarih","youtube","turkce","egitim","gizem","kesfet"],"gorseller":gorseller,"thumbnail_metin":konu.upper()[:15],"thumbnail_prompt":f"{konu} epic dramatic historical cinematic no text","renk":"#1a1a2e"}
     tg("SEO optimize ediliyor...","📋")
     try:
@@ -159,18 +193,21 @@ def muzik_uret(konu,sure_sn):
                     elif i>n-fade: v*=(n-i)/fade
                     buf.append(struct.pack('<h',int(max(-0.85,min(0.85,v))*32767)))
                 f.write(b''.join(buf))
-        r=subprocess.run(["ffmpeg","-y","-i",str(wav),"-af","aecho=0.6:0.7:80:0.15,volume=0.55","-c:a","mp3","-b:a","128k",str(mp3)],capture_output=True,text=True,timeout=180)
+        r=subprocess.run(["ffmpeg","-y","-i",str(wav),
+            "-af","volume=1.8,aecho=0.5:0.6:60:0.2",
+            "-c:a","mp3","-b:a","128k",str(mp3)],capture_output=True,text=True,timeout=180)
         if r.returncode==0 and mp3.exists() and mp3.stat().st_size>1000:
-            tg(f"Muzik hazir! ({label})","✅"); return str(mp3)
-    except Exception as e: tg(f"Muzik hatasi: {str(e)[:60]}","⚠")
+            kb=mp3.stat().st_size//1024
+            tg(f"Muzik hazir! ({label}, {kb}KB)","✅"); return str(mp3)
+    except Exception as e: tg(f"Muzik WAV hatasi: {str(e)[:60]}","⚠")
     return ""
 
 def gorsel_indir(i,prompt,toplam,konu=""):
     yol=WORK/f"img_{i+1:02d}.jpg"
-    # Konuyu prompt basina ekle - cok spesifik
-    konu_prefix = konu[:40] if konu else ""
+    # Konudan anahtar kelimeler al, insan/araba yasak
     kisa = prompt[:80].replace('"','').replace("'",'')
-    tam_prompt = f"{konu_prefix}, {kisa}, photorealistic cinematic 4k NO cars NO vehicles"
+    # Konuyu spesifik tut, insan ve arac yok
+    tam_prompt = f"{kisa}, no people, no humans, no cars, no vehicles, cinematic landscape architecture 8k dramatic lighting"
     
     for seed in [i*7+42, i*13+17, i*3+99]:
         enc=quote(tam_prompt[:200])
@@ -279,7 +316,7 @@ def ses_miksle(anlati,muzik,sure):
          "-i",anlati_src,
          "-stream_loop","-1","-i",muzik_src,
          "-filter_complex",
-         f"[0:a]volume=1.0,apad[a1];[1:a]volume=0.13[a2];[a1][a2]amix=inputs=2:duration=shortest[out]",
+         f"[0:a]volume=1.0[a1];[1:a]volume=0.35[a2];[a1][a2]amix=inputs=2:duration=first[out]",
          "-map","[out]",
          "-c:a","mp3","-b:a","192k","-t",str(int(sure)),
          str(miksl)]
@@ -298,12 +335,23 @@ def video_montaj(gorseller,ses,altyazi_srt,toplam_sure):
     segmentler=[]
     for i,gorsel in enumerate(gorseller):
         seg=WORK/f"seg_{i:03d}.mp4"; fo=max(0,her-0.6); fr=max(int(her*fps),25); ef=i%6
-        if ef==0: vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0008,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        elif ef==1: vf=f"scale=iw*2:ih*2,zoompan=z='if(lte(on,1),1.15,max(zoom-0.001,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        elif ef==2: vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)+on*0.8':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        elif ef==3: vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)-on*0.8':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        elif ef==4: vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0006,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)+on*0.6':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        else: vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0006,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)-on*0.6':d={fr}:s=1920x1080:fps={fps},vignette=angle=PI/4:mode=backward,fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
+        ef=i%8
+        if ef==0:   # Zoom in
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0008,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
+        elif ef==1: # Zoom out
+            vf=f"scale=iw*2:ih*2,zoompan=z='if(lte(on,1),1.15,max(zoom-0.001,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
+        elif ef==2: # Sol sag pan
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)+on*0.8':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
+        elif ef==3: # Sag sol pan
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)-on*0.8':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
+        elif ef==4: # Asagi yukari
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0006,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)+on*0.6':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
+        elif ef==5: # Yukari asagi + vignette
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0006,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)-on*0.6':d={fr}:s=1920x1080:fps={fps},vignette=angle=PI/5,fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
+        elif ef==6: # Ken Burns diagonal
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0007,1.1)':x='iw/2-(iw/zoom/2)+on*0.4':y='ih/2-(ih/zoom/2)+on*0.3':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
+        else:       # Zoom in + brightness pulse
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0008,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},eq=brightness='0.03*sin(2*PI*t/8)':contrast=1.05,fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
         cmd1=["ffmpeg","-y","-loop","1","-t",str(her+1),"-i",gorsel,"-vf",vf,"-t",str(her),"-c:v","libx264","-preset","ultrafast","-crf","28","-an","-pix_fmt","yuv420p",str(seg)]
         r=subprocess.run(cmd1,capture_output=True,text=True,timeout=300)
         if r.returncode==0 and seg.exists() and seg.stat().st_size>500: segmentler.append(str(seg)); tg(f"Seg {i+1}/{len(gorseller)} ef{ef+1} ok","🎬")
