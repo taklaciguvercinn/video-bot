@@ -228,11 +228,11 @@ def ses_uret(senaryo):
     sub_vtt=WORK/"altyazi.vtt"; sub_srt=WORK/"altyazi.srt"
     sf.write_text(senaryo,encoding="utf-8")
     for rate,pitch,vol in [("-8%","-10Hz","+15%"),("-5%","-5Hz","+10%"),("0%","0Hz","0%")]:
-        r=subprocess.run(["edge-tts","--voice","tr-TR-AhmetNeural","--file",str(sf),"--write-media",str(rf),"--write-subtitles",str(sub_vtt),f"--rate={rate}",f"--pitch={pitch}",f"--volume={vol}"],capture_output=True,text=True,timeout=600)
+        r=subprocess.run(["edge-tts","--voice","tr-TR-EmelNeural","--file",str(sf),"--write-media",str(rf),"--write-subtitles",str(sub_vtt),f"--rate={rate}",f"--pitch={pitch}",f"--volume={vol}"],capture_output=True,text=True,timeout=600)
         if r.returncode==0 and rf.exists() and rf.stat().st_size>1000: tg(f"Ses uretildi (rate={rate})","✅"); break
         time.sleep(3)
     else:
-        r2=subprocess.run(["edge-tts","--voice","tr-TR-AhmetNeural","--file",str(sf),"--write-media",str(rf),"--write-subtitles",str(sub_vtt)],capture_output=True,text=True,timeout=600)
+        r2=subprocess.run(["edge-tts","--voice","tr-TR-EmelNeural","--file",str(sf),"--write-media",str(rf),"--write-subtitles",str(sub_vtt)],capture_output=True,text=True,timeout=600)
         if r2.returncode!=0 or not rf.exists(): raise Exception(f"TTS: {r2.stderr[-80:]}")
     subprocess.run(["ffmpeg","-y","-i",str(rf),"-af","equalizer=f=80:width_type=o:width=2:g=5,equalizer=f=200:width_type=o:width=2:g=3,equalizer=f=3000:width_type=o:width=2:g=-3,equalizer=f=8000:width_type=o:width=2:g=-5,acompressor=threshold=-16dB:ratio=3:attack=5:release=60,volume=1.3","-c:a","mp3","-b:a","192k",str(ff)],capture_output=True)
     kullan=str(ff) if ff.exists() else str(rf)
@@ -253,19 +253,42 @@ def ses_uret(senaryo):
     return kullan,sure,str(sub_srt) if sub_srt.exists() else ""
 
 def ses_miksle(anlati,muzik,sure):
-    if not muzik or not os.path.exists(muzik): tg("Muzik yok","⚠"); return anlati
+    if not muzik or not os.path.exists(muzik):
+        tg("Muzik dosyasi yok, sadece anlatici","⚠")
+        return anlati
     try:
-        p=subprocess.run(["ffprobe","-v","quiet","-print_format","json","-show_format",muzik],capture_output=True,text=True)
-        if float(json.loads(p.stdout)["format"]["duration"])<3: return anlati
-    except: return anlati
-    tg("Ses + Muzik karistiriliyor...","🎚")
+        pb=subprocess.run(["ffprobe","-v","quiet","-print_format","json","-show_format",muzik],capture_output=True,text=True)
+        muzik_sure=float(json.loads(pb.stdout)["format"]["duration"])
+        if muzik_sure<3:
+            tg("Muzik cok kisa","⚠"); return anlati
+        tg(f"Muzik bulundu ({muzik_sure:.0f}sn), karistiriliyor...","🎚")
+    except Exception as e:
+        tg(f"Muzik kontrol hatasi: {str(e)[:40]}","⚠"); return anlati
+    
     miksl=WORK/"miksl.mp3"
-    cmd=["ffmpeg","-y","-i",anlati,"-stream_loop","-1","-i",muzik,
-         "-filter_complex","[0:a]volume=1.0[main];[1:a]volume=0.15[bg];[main][bg]amix=inputs=2:duration=first:dropout_transition=0[out]",
-         "-map","[out]","-c:a","mp3","-b:a","192k","-t",str(sure),str(miksl)]
+    # Muzigi once WAV'a cevir - format uyumsuzlugunu onler
+    muzik_wav=WORK/"muzik_cevir.wav"
+    subprocess.run(["ffmpeg","-y","-i",muzik,"-ar","44100","-ac","1",str(muzik_wav)],capture_output=True)
+    anlati_wav=WORK/"anlati_cevir.wav"  
+    subprocess.run(["ffmpeg","-y","-i",anlati,"-ar","44100","-ac","1",str(anlati_wav)],capture_output=True)
+    
+    muzik_src=str(muzik_wav) if muzik_wav.exists() else muzik
+    anlati_src=str(anlati_wav) if anlati_wav.exists() else anlati
+    
+    cmd=["ffmpeg","-y",
+         "-i",anlati_src,
+         "-stream_loop","-1","-i",muzik_src,
+         "-filter_complex",
+         f"[0:a]volume=1.0,apad[a1];[1:a]volume=0.13[a2];[a1][a2]amix=inputs=2:duration=shortest[out]",
+         "-map","[out]",
+         "-c:a","mp3","-b:a","192k","-t",str(int(sure)),
+         str(miksl)]
     r=subprocess.run(cmd,capture_output=True,text=True,timeout=600)
-    if r.returncode==0 and miksl.exists() and miksl.stat().st_size>10000: tg("Muzik eklendi!","✅"); return str(miksl)
-    tg(f"Miks hatasi","⚠"); return anlati
+    if r.returncode==0 and miksl.exists() and miksl.stat().st_size>10000:
+        tg("Muzik basariyla eklendi!","✅")
+        return str(miksl)
+    tg(f"Miks hatasi: {r.stderr[-100:]}","⚠")
+    return anlati
 
 def video_montaj(gorseller,ses,altyazi_srt,toplam_sure):
     tg(f"Video montajlaniyor...\n{len(gorseller)} gorsel | 6 farkli efekt\n⏳ ~{len(gorseller)//2+5} dk","🎬")
@@ -299,7 +322,7 @@ def video_montaj(gorseller,ses,altyazi_srt,toplam_sure):
     if altyazi_srt and os.path.exists(altyazi_srt):
         tg("Altyazi ekleniyor (sari, siyah cerceve)...","📝")
         safe=os.path.abspath(altyazi_srt).replace('\\','/').replace(':','\\:')
-        vf_sub=f"subtitles='{safe}':force_style='FontName=DejaVu Sans,FontSize=14,PrimaryColour=&H00FFFF00,OutlineColour=&H00000000,Bold=1,Outline=2,Shadow=1,Alignment=2,MarginV=30'"
+        vf_sub=f"subtitles='{safe}':force_style='FontName=DejaVu Sans,FontSize=14,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BorderStyle=1,Bold=1,Outline=2,Shadow=1,Alignment=2,MarginV=30'"
         cmd_sub=["ffmpeg","-y","-i",str(cikis),"-vf",vf_sub,"-c:v","libx264","-preset","ultrafast","-crf","26","-c:a","copy",str(cikis_son)]
         r=subprocess.run(cmd_sub,capture_output=True,text=True,timeout=3600)
         if r.returncode==0 and cikis_son.exists(): tg("Altyazi eklendi!","✅")
