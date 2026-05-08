@@ -86,10 +86,9 @@ def telaffuz(metin):
 def senaryo_uret(konu,sure,resim_sayisi,video_sayisi):
     tg(f"'{konu}' icin icerik uretiliyor...","📚")
     kelime=sure*160
-    # Konuya ozgu anahtar kelimeler
     k=konu.lower()
     for c,r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]: k=k.replace(c,r)
-    
+
     mekan_sozlugu = {
         "cin seddi": ["Great Wall of China ancient stone watchtower","Chinese fortress mountain mist","ancient Chinese battlefield landscape","Ming dynasty stone architecture"],
         "osmanli": ["Ottoman Empire palace architecture","Byzantine Constantinople cityscape","Ottoman army fortress medieval","Topkapi palace golden era"],
@@ -99,23 +98,21 @@ def senaryo_uret(konu,sure,resim_sayisi,video_sayisi):
         "uzay": ["deep space nebula galaxy","space station orbit Earth","astronaut spacewalk cosmos","alien planet landscape dramatic"],
         "doga": ["tropical rainforest waterfall","mountain glacier landscape dramatic","ocean waves cliffs dramatic","ancient forest mystical fog"],
     }
-    
-    # Konuya uyan mekan promptlarini bul
+
     bulunan = []
     for anahtar, promptlar in mekan_sozlugu.items():
         if anahtar in k:
             bulunan = promptlar
             break
-    
+
     if not bulunan:
-        # Genel tarihi mimari
         bulunan = [
             f"ancient {konu} landscape dramatic architecture no people",
             f"historical {konu} ruins stone dramatic lighting no people",
             f"epic {konu} environment cinematic landscape",
             f"mystical {konu} ancient site dramatic atmosphere",
         ]
-    
+
     gorseller=[]
     for i in range(resim_sayisi):
         base = bulunan[i % len(bulunan)]
@@ -124,6 +121,7 @@ def senaryo_uret(konu,sure,resim_sayisi,video_sayisi):
         elif i % 3 == 1:
             base += ", close up detail, dramatic shadow, golden hour"
         gorseller.append(base)
+
     meta={"baslik":f"{konu}: Tarihin Gizli Sirri!","aciklama":f"{konu} hakkinda kapsamli Turkce belgesel. #belgesel #tarih #{konu.replace(' ','')}","etiketler":[konu,"belgesel","tarih","youtube","turkce","egitim","gizem","kesfet"],"gorseller":gorseller,"thumbnail_metin":konu.upper()[:15],"thumbnail_prompt":f"{konu} epic dramatic historical cinematic no text","renk":"#1a1a2e"}
     tg("SEO optimize ediliyor...","📋")
     try:
@@ -163,107 +161,148 @@ KESIN KURALLAR:
     tg(f"Toplam: <b>{len(senaryo.split())} kelime</b>","📊")
     return meta
 
-def muzik_uret(konu,sure_sn):
-    tg("Muzik uretiliyor...","🎵")
-    wav=WORK/"muzik.wav"; mp3=WORK/"muzik.mp3"
-    k=konu.lower()
-    for c,r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]: k=k.replace(c,r)
-    import random,hashlib
-    # Konu bazli tohum - ayni konu hep farkli muzik
-    seed_val = int(hashlib.md5(konu.encode()).hexdigest()[:8],16) % 1000
+def muzik_uret(konu, sure_sn):
+    tg("Muzik uretiliyor...", "🎵")
+    wav = WORK / "muzik.wav"
+    mp3 = WORK / "muzik.mp3"
 
-    # Muzik kategorileri - her kategoride 3 farkli varyasyon
-    if any(x in k for x in ["viking","savas","osmanli","roma","selcuklu","tarih","cin","mogol","seldz"]):
-        varyasyonlar = [
-            ([55,110,165,220,82], [0.30,0.20,0.15,0.08,0.12], "epic_1"),   # Derin davul
-            ([41,82,123,165,55], [0.28,0.22,0.16,0.09,0.10], "epic_2"),    # Cok derin
-            ([55,110,220,330,82], [0.25,0.20,0.18,0.08,0.14], "epic_3"),   # Orta epik
+    k = konu.lower()
+    for c, r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]:
+        k = k.replace(c, r)
+
+    import hashlib
+    seed_val = int(hashlib.md5(konu.encode()).hexdigest()[:8], 16) % 1000
+
+    if any(x in k for x in ["viking","savas","osmanli","roma","selcuklu","tarih","cin","mogol"]):
+        kategoriler = [
+            {"base":[55,110,165,220,82],"amps":[0.28,0.18,0.12,0.07,0.20],"chords":[1.0,1.12,0.94,1.06],"dur":6,"label":"epic_1"},
+            {"base":[41,82,123,165,55], "amps":[0.26,0.20,0.13,0.06,0.22],"chords":[1.0,1.19,0.89,1.12],"dur":5,"label":"epic_2"},
+            {"base":[55,110,220,165,82],"amps":[0.24,0.18,0.15,0.08,0.20],"chords":[1.0,1.06,1.12,0.94],"dur":7,"label":"epic_3"},
         ]
-    elif any(x in k for x in ["misir","antik","yunan","sumer","babil","mezopotamya","fenike"]):
-        varyasyonlar = [
-            ([174,261,348,130,87], [0.25,0.20,0.15,0.10,0.08], "ancient_1"),
-            ([196,294,392,147,98], [0.22,0.18,0.14,0.12,0.09], "ancient_2"),
-            ([164,246,328,123,82], [0.28,0.19,0.13,0.10,0.07], "ancient_3"),
+        bpm = 80
+    elif any(x in k for x in ["misir","antik","yunan","sumer","babil","mezopotamya"]):
+        kategoriler = [
+            {"base":[174,261,348,130,87],"amps":[0.22,0.17,0.12,0.10,0.18],"chords":[1.0,1.12,1.26,1.06],"dur":8,"label":"ancient_1"},
+            {"base":[196,294,392,147,98],"amps":[0.20,0.16,0.13,0.11,0.17],"chords":[1.0,1.19,0.94,1.12],"dur":7,"label":"ancient_2"},
+            {"base":[164,246,328,123,82],"amps":[0.24,0.17,0.11,0.09,0.19],"chords":[1.0,1.06,1.19,0.89],"dur":6,"label":"ancient_3"},
         ]
+        bpm = 65
     elif any(x in k for x in ["uzay","yapay","teknoloji","bilim","robot","gelecek"]):
-        varyasyonlar = [
-            ([220,330,440,550,110], [0.20,0.16,0.12,0.08,0.10], "space_1"),
-            ([196,294,392,490,98],  [0.22,0.17,0.13,0.07,0.09], "space_2"),
-            ([233,349,466,582,116], [0.18,0.15,0.14,0.09,0.11], "space_3"),
+        kategoriler = [
+            {"base":[220,330,440,550,110],"amps":[0.18,0.14,0.10,0.06,0.16],"chords":[1.0,1.12,1.33,1.06],"dur":9,"label":"space_1"},
+            {"base":[196,294,392,490,98], "amps":[0.20,0.15,0.11,0.05,0.15],"chords":[1.0,1.19,1.06,1.26],"dur":8,"label":"space_2"},
+            {"base":[233,349,466,582,116],"amps":[0.16,0.13,0.12,0.07,0.17],"chords":[1.0,1.06,1.33,0.94],"dur":10,"label":"space_3"},
         ]
+        bpm = 90
     elif any(x in k for x in ["doga","hayvan","deniz","orman","okyanus"]):
-        varyasyonlar = [
-            ([196,261,329,392,130], [0.20,0.16,0.14,0.10,0.08], "nature_1"),
-            ([174,232,293,349,116], [0.22,0.17,0.13,0.09,0.07], "nature_2"),
-            ([207,276,347,415,138], [0.18,0.15,0.14,0.11,0.09], "nature_3"),
+        kategoriler = [
+            {"base":[196,261,329,392,130],"amps":[0.18,0.14,0.12,0.08,0.16],"chords":[1.0,1.12,1.25,1.06],"dur":8,"label":"nature_1"},
+            {"base":[174,232,293,349,116],"amps":[0.20,0.15,0.11,0.07,0.15],"chords":[1.0,1.19,1.06,1.12],"dur":7,"label":"nature_2"},
+            {"base":[207,276,347,415,138],"amps":[0.16,0.13,0.13,0.09,0.17],"chords":[1.0,1.06,1.19,0.94],"dur":9,"label":"nature_3"},
         ]
+        bpm = 60
     elif any(x in k for x in ["gizem","korku","paranormal","komplo","karanlik"]):
-        varyasyonlar = [
-            ([73,110,155,207,87],  [0.25,0.18,0.13,0.09,0.10], "mystery_1"),
-            ([65,98,138,184,77],   [0.27,0.19,0.12,0.08,0.11], "mystery_2"),
-            ([82,123,174,232,98],  [0.23,0.17,0.14,0.10,0.09], "mystery_3"),
+        kategoriler = [
+            {"base":[73,110,155,207,87], "amps":[0.22,0.16,0.11,0.07,0.20],"chords":[1.0,1.06,0.89,1.12],"dur":7,"label":"mystery_1"},
+            {"base":[65,98,138,184,77],  "amps":[0.24,0.17,0.10,0.06,0.21],"chords":[1.0,0.94,1.06,1.19],"dur":6,"label":"mystery_2"},
+            {"base":[82,123,174,232,98], "amps":[0.20,0.15,0.12,0.08,0.19],"chords":[1.0,1.12,0.89,1.06],"dur":8,"label":"mystery_3"},
         ]
+        bpm = 55
     else:
-        varyasyonlar = [
-            ([130,164,196,261,87], [0.22,0.18,0.14,0.09,0.08], "cinematic_1"),
-            ([138,174,207,277,92], [0.20,0.17,0.15,0.10,0.09], "cinematic_2"),
-            ([123,155,185,247,82], [0.24,0.16,0.13,0.08,0.10], "cinematic_3"),
+        kategoriler = [
+            {"base":[130,164,196,261,87],"amps":[0.20,0.16,0.12,0.07,0.18],"chords":[1.0,1.12,1.25,1.06],"dur":7,"label":"cinematic_1"},
+            {"base":[138,174,207,277,92],"amps":[0.18,0.15,0.13,0.08,0.17],"chords":[1.0,1.19,1.06,1.12],"dur":6,"label":"cinematic_2"},
+            {"base":[123,155,185,247,82],"amps":[0.22,0.14,0.11,0.06,0.19],"chords":[1.0,1.06,1.19,0.94],"dur":8,"label":"cinematic_3"},
         ]
+        bpm = 70
 
-    freqs,amps,label = varyasyonlar[seed_val % len(varyasyonlar)]
+    cfg        = kategoriler[seed_val % len(kategoriler)]
+    base_freqs = cfg["base"]
+    amps       = cfg["amps"]
+    chords     = cfg["chords"]
+    chord_dur  = cfg["dur"]
+    label      = cfg["label"]
 
-    sr=44100; dur=int(min(sure_sn+30,7200)); n=sr*dur; fade=sr*4
+    sr          = 44100
+    dur         = int(min(sure_sn + 30, 7200))
+    n           = sr * dur
+    fade        = sr * 3
+    beat_period = int(sr * 60 / bpm)
+    beat_env_len= int(sr * 0.20)
 
-    # Ritim icin vurus pattern (her 0.5 saniyede hafif vurus)
-    bpm = 90 if "epic" in label else 75 if "ancient" in label else 95 if "space" in label else 70
-    vurus_periyot = sr * 60 // bpm
+    def smooth_env(pos, length):
+        if pos >= length: return 0.0
+        return math.sin(math.pi * pos / length) ** 2
 
     try:
-        with open(wav,'wb') as f:
-            dsize=n*2
-            f.write(b'RIFF'); f.write(struct.pack('<I',36+dsize))
-            f.write(b'WAVEfmt '); f.write(struct.pack('<I',16))
-            f.write(struct.pack('<H',1)); f.write(struct.pack('<H',1))
-            f.write(struct.pack('<I',sr)); f.write(struct.pack('<I',sr*2))
-            f.write(struct.pack('<H',2)); f.write(struct.pack('<H',16))
-            f.write(b'data'); f.write(struct.pack('<I',dsize))
-            for start in range(0,n,sr):
-                end=min(start+sr,n); buf=[]
-                for i in range(start,end):
-                    t=i/sr
-                    # Ana melodi
-                    v=sum(a*math.sin(2*math.pi*fr*t) for a,fr in zip(amps,freqs))
-                    # Ritim vurusu
-                    pos_in_beat = i % vurus_periyot
-                    if pos_in_beat < sr//20:  # Vurusun ilk 50ms'i
-                        vurus_env = 1.0 - (pos_in_beat / (sr//20))
-                        v += 0.15 * vurus_env * math.sin(2*math.pi*80*t)
-                    # Hafif saliniм
-                    v *= (1+0.02*math.sin(2*math.pi*0.2*t))
-                    # Fade
-                    if i<fade: v*=i/fade
-                    elif i>n-fade: v*=(n-i)/fade
-                    buf.append(struct.pack('<h',int(max(-0.88,min(0.88,v))*32767)))
+        with open(wav, 'wb') as f:
+            dsize = n * 2
+            f.write(b'RIFF'); f.write(struct.pack('<I', 36 + dsize))
+            f.write(b'WAVEfmt '); f.write(struct.pack('<I', 16))
+            f.write(struct.pack('<H', 1)); f.write(struct.pack('<H', 1))
+            f.write(struct.pack('<I', sr)); f.write(struct.pack('<I', sr * 2))
+            f.write(struct.pack('<H', 2)); f.write(struct.pack('<H', 16))
+            f.write(b'data'); f.write(struct.pack('<I', dsize))
+
+            for start in range(0, n, sr):
+                end = min(start + sr, n)
+                buf = []
+                for i in range(start, end):
+                    t = i / sr
+
+                    # Chord progression
+                    chord_idx = int(t / chord_dur) % len(chords)
+                    chord_pos = t % chord_dur
+                    xfade = 0.5
+                    if chord_pos < xfade:
+                        prev_idx   = (chord_idx - 1) % len(chords)
+                        blend      = chord_pos / xfade
+                        multiplier = chords[prev_idx] * (1 - blend) + chords[chord_idx] * blend
+                    else:
+                        multiplier = chords[chord_idx]
+
+                    # Ana harmonikler
+                    v = sum(a * math.sin(2 * math.pi * fr * multiplier * t)
+                            for a, fr in zip(amps, base_freqs))
+
+                    # 3. harmonik - dolgunluk
+                    v += amps[0] * 0.08 * math.sin(2 * math.pi * base_freqs[0] * multiplier * 3 * t)
+
+                    # Ritim - smooth envelope, patlama yok
+                    pos_in_beat = i % beat_period
+                    v += 0.10 * smooth_env(pos_in_beat, beat_env_len) * math.sin(2 * math.pi * 70 * multiplier * t)
+
+                    # Hafif tremolo
+                    v *= (1 + 0.02 * math.sin(2 * math.pi * 0.15 * t))
+
+                    # Fade in/out
+                    if i < fade:   v *= i / fade
+                    elif i > n - fade: v *= (n - i) / fade
+
+                    buf.append(struct.pack('<h', int(max(-0.85, min(0.85, v)) * 32767)))
+
                 f.write(b''.join(buf))
 
-        r=subprocess.run(["ffmpeg","-y","-i",str(wav),
-            "-af","volume=2.0",
-            "-c:a","mp3","-b:a","128k",str(mp3)],
-            capture_output=True,text=True,timeout=180)
-        if r.returncode==0 and mp3.exists() and mp3.stat().st_size>1000:
-            kb=mp3.stat().st_size//1024
-            tg(f"Muzik hazir! ({label}, {bpm}bpm, {kb}KB)","✅")
+        r = subprocess.run(
+            ["ffmpeg", "-y", "-i", str(wav),
+             "-af", "volume=2.0,highpass=f=40,lowpass=f=8000",
+             "-c:a", "mp3", "-b:a", "128k", str(mp3)],
+            capture_output=True, text=True, timeout=180
+        )
+        if r.returncode == 0 and mp3.exists() and mp3.stat().st_size > 1000:
+            kb = mp3.stat().st_size // 1024
+            tg(f"Muzik hazir! ({label}, {bpm}bpm, {kb}KB)", "✅")
             return str(mp3)
-    except Exception as e: tg(f"Muzik hatasi: {str(e)[:60]}","⚠")
+
+    except Exception as e:
+        tg(f"Muzik hatasi: {str(e)[:60]}", "⚠")
     return ""
 
 def gorsel_indir(i,prompt,toplam,konu=""):
     yol=WORK/f"img_{i+1:02d}.jpg"
-    # Konudan anahtar kelimeler al, insan/araba yasak
     kisa = prompt[:80].replace('"','').replace("'",'')
-    # Konuyu spesifik tut, insan ve arac yok
     tam_prompt = f"{kisa}, no people, no humans, no cars, no vehicles, cinematic landscape architecture 8k dramatic lighting"
-    
+
     for seed in [i*7+42, i*13+17, i*3+99]:
         enc=quote(tam_prompt[:200])
         url=f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true&model=flux&enhance=true"
@@ -277,7 +316,7 @@ def gorsel_indir(i,prompt,toplam,konu=""):
             if r.status_code==429: time.sleep(30)
             else: time.sleep(8)
         except: time.sleep(8)
-    
+
     renkler=["0x3D1C02","0x4A0E0E","0x0A1628","0x2D1B69","0x003333","0x1A3A1A","0x330033","0x1A1A00"]
     subprocess.run(["ffmpeg","-y","-f","lavfi","-i",f"color=c={renkler[i%len(renkler)]}:size=1920x1080:rate=1","-vframes","1","-q:v","2",str(yol)],capture_output=True)
     tg(f"Gorsel {i+1} yedek","⚠")
@@ -286,7 +325,6 @@ def gorsel_indir(i,prompt,toplam,konu=""):
 def gorseller_uret(promptlar,konu=""):
     n=len(promptlar)
     tg(f"{n} gorsel uretiliyor (sirali, konuya ozgu)...","🎨")
-    # SIRALI - rate limit yok, konuyu her gorsele ekle
     return [gorsel_indir(i,p,n,konu) for i,p in enumerate(promptlar)]
 
 def thumbnail_uret(prompt,metin,renk,konu):
@@ -357,7 +395,6 @@ def ses_miksle(anlati,muzik,sure):
         tg(f"Muzik probe hatasi: {e}","⚠"); return anlati
 
     miksl=WORK/"miksl.mp3"
-    # En basit ve garantili yontem
     cmd=["ffmpeg","-y",
          "-i",anlati,
          "-stream_loop","-1","-i",muzik,
@@ -373,103 +410,5 @@ def ses_miksle(anlati,muzik,sure):
     if r.returncode==0 and miksl.exists() and miksl.stat().st_size>50000:
         tg(f"Muzik eklendi! ({miksl.stat().st_size//1024}KB)","✅")
         return str(miksl)
-    tg(f"Miks hatasi: {r.stderr[-150:]}","⚠")
+    tg("Miksaj hatasi, muzik olmadan devam","⚠")
     return anlati
-
-def video_montaj(gorseller,ses,altyazi_srt,toplam_sure):
-    tg(f"Video montajlaniyor...\n{len(gorseller)} gorsel | 6 farkli efekt\n⏳ ~{len(gorseller)//2+5} dk","🎬")
-    cikis=WORK/"video_raw.mp4"; cikis_son=WORK/"video.mp4"; liste=WORK/"liste.txt"
-    her=toplam_sure/len(gorseller); fps=25
-    tg(f"Toplam: {toplam_sure/60:.1f} dk | Gorsel basina: {her:.1f}s","⚙")
-    segmentler=[]
-    for i,gorsel in enumerate(gorseller):
-        seg=WORK/f"seg_{i:03d}.mp4"; fo=max(0,her-0.6); fr=max(int(her*fps),25); ef=i%6
-        ef=i%5
-        if ef==0:   # Zoom in merkez
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0008,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        elif ef==1: # Zoom out
-            vf=f"scale=iw*2:ih*2,zoompan=z='if(lte(on,1),1.12,max(zoom-0.0008,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        elif ef==2: # Sol sag kayma
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)+on*0.6':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        elif ef==3: # Sag sol kayma
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)-on*0.6':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        else:       # Zoom in + vignette
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0007,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},vignette=angle=PI/5,fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
-        cmd1=["ffmpeg","-y","-loop","1","-t",str(her+1),"-i",gorsel,"-vf",vf,"-t",str(her),"-c:v","libx264","-preset","ultrafast","-crf","28","-an","-pix_fmt","yuv420p",str(seg)]
-        r=subprocess.run(cmd1,capture_output=True,text=True,timeout=300)
-        if r.returncode==0 and seg.exists() and seg.stat().st_size>500: segmentler.append(str(seg)); tg(f"Seg {i+1}/{len(gorseller)} ef{ef+1} ok","🎬")
-        else:
-            cmd2=["ffmpeg","-y","-loop","1","-t",str(her),"-i",gorsel,"-vf",f"scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=black,fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5","-c:v","libx264","-preset","ultrafast","-crf","28","-an","-pix_fmt","yuv420p",str(seg)]
-            r2=subprocess.run(cmd2,capture_output=True,text=True,timeout=120)
-            if r2.returncode==0 and seg.exists(): segmentler.append(str(seg)); tg(f"Seg {i+1} yedek","⚠")
-    if not segmentler: raise Exception("Segment olusturulamadi!")
-    with open(liste,"w") as f:
-        for s in segmentler: f.write(f"file '{os.path.abspath(s)}'\n")
-    cmd_son=["ffmpeg","-y","-f","concat","-safe","0","-i",str(liste),"-i",ses,"-c:v","copy","-c:a","aac","-b:a","192k","-shortest","-movflags","+faststart",str(cikis)]
-    r=subprocess.run(cmd_son,capture_output=True,text=True,timeout=3600)
-    if r.returncode!=0:
-        r=subprocess.run(["ffmpeg","-y","-f","concat","-safe","0","-i",str(liste),"-i",ses,"-c:v","libx264","-preset","ultrafast","-crf","26","-c:a","aac","-b:a","192k","-shortest","-movflags","+faststart",str(cikis)],capture_output=True,text=True,timeout=3600)
-        if r.returncode!=0: raise Exception(f"Birlestirme: {r.stderr[-150:]}")
-    if altyazi_srt and os.path.exists(altyazi_srt):
-        tg("Altyazi ekleniyor (sari, siyah cerceve)...","📝")
-        safe=os.path.abspath(altyazi_srt).replace('\\','/').replace(':','\\:')
-        vf_sub=f"subtitles='{safe}':force_style='FontName=DejaVu Sans,FontSize=14,PrimaryColour=&H0000FFFF,OutlineColour=&H00000000,BorderStyle=1,Bold=1,Outline=2,Shadow=1,Alignment=2,MarginV=30'"
-        cmd_sub=["ffmpeg","-y","-i",str(cikis),"-vf",vf_sub,"-c:v","libx264","-preset","ultrafast","-crf","26","-c:a","copy",str(cikis_son)]
-        r=subprocess.run(cmd_sub,capture_output=True,text=True,timeout=3600)
-        if r.returncode==0 and cikis_son.exists(): tg("Altyazi eklendi!","✅")
-        else: subprocess.run(["cp",str(cikis),str(cikis_son)])
-    else: subprocess.run(["cp",str(cikis),str(cikis_son)])
-    mb=os.path.getsize(cikis_son)/1024/1024; tg(f"Video hazir! <b>{mb:.0f} MB</b>","✅"); return str(cikis_son)
-
-def yt_token():
-    r=requests.post("https://oauth2.googleapis.com/token",data={"client_id":YOUTUBE_CLIENT_ID,"client_secret":YOUTUBE_CLIENT_SECRET,"refresh_token":YOUTUBE_REFRESH_TOKEN,"grant_type":"refresh_token"},timeout=30)
-    if r.status_code!=200: raise Exception(f"YT token: {r.text[:100]}")
-    return r.json()["access_token"]
-
-def youtube_yukle(video,thumb,baslik,aciklama,etiketler,yayin_iso):
-    tg("YouTube'a yukleniyor...","📤")
-    token=yt_token()
-    meta={"snippet":{"title":baslik[:100],"description":aciklama[:5000],"tags":etiketler[:15],"categoryId":"27"},"status":{"privacyStatus":"private","publishAt":yayin_iso,"selfDeclaredMadeForKids":False}}
-    boyut=os.path.getsize(video)
-    init=requests.post("https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",headers={"Authorization":f"Bearer {token}","Content-Type":"application/json","X-Upload-Content-Type":"video/mp4","X-Upload-Content-Length":str(boyut)},json=meta,timeout=30)
-    if init.status_code!=200: raise Exception(f"YT init: {init.text[:100]}")
-    tg(f"Video yukleniyor ({boyut//1024//1024} MB)...","⏳")
-    with open(video,"rb") as f:
-        r=requests.put(init.headers["Location"],headers={"Content-Type":"video/mp4"},data=f,timeout=3600)
-    if r.status_code not in [200,201]: raise Exception(f"YT: {r.text[:100]}")
-    vid_id=r.json()["id"]; vid_url=f"https://youtu.be/{vid_id}"
-    tg(f"Video yuklendi!\n{vid_url}","✅")
-    try:
-        with open(thumb,"rb") as tf:
-            tr=requests.post(f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={vid_id}",headers={"Authorization":f"Bearer {token}","Content-Type":"image/jpeg"},data=tf,timeout=60)
-        tg("Thumbnail yuklendi!" if tr.status_code in[200,201] else f"Thumbnail({tr.status_code})","✅" if tr.status_code in[200,201] else "⚠")
-    except: pass
-    return vid_url,vid_id
-
-def main():
-    cmd=sys.argv[1] if len(sys.argv)>1 else ""
-    if not cmd: sys.exit(1)
-    try: p=komut_isle(cmd)
-    except Exception as e: tg(str(e),"❌"); sys.exit(1)
-    tg(f"<b>Video Bot v10 Basladi!</b>\n\nKonu: <b>{p['konu']}</b>\nSure: {p['sure']} dk\nGorsel: {p['resim']} adet\nYayin: {p['yayin_dt'].strftime('%d.%m.%Y %H:%M')}\nMuzik: Konuya ozel\nAltyazi: Sari+siyah cerceve\nEfektler: 6 farkli","🚀")
-    try:
-        icerik=senaryo_uret(p["konu"],p["sure"],p["resim"],p["video_sayisi"])
-        (WORK/"metadata.json").write_text(json.dumps(icerik,ensure_ascii=False,indent=2))
-        muzik=muzik_uret(p["konu"],p["sure"]*60+120)
-        gp=icerik.get("gorseller",[])
-        while len(gp)<p["resim"]: gp.append(f"{p['konu']} dramatic historical cinematic scene {len(gp)+1} 8k")
-        gorseller=gorseller_uret(gp,p["konu"])
-        thumb=thumbnail_uret(icerik.get("thumbnail_prompt",f"{p['konu']} epic dramatic cinematic"),icerik.get("thumbnail_metin",p["konu"].upper()[:15]),icerik.get("renk","#1a1a2e"),p["konu"])
-        ses,sure,altyazi=ses_uret(icerik["senaryo"])
-        miksli=ses_miksle(ses,muzik,sure)
-        video=video_montaj(gorseller,miksli,altyazi,sure)
-        vid_url,_=youtube_yukle(video,thumb,icerik.get("baslik",p["konu"]+" Belgeseli"),icerik.get("aciklama",p["konu"]+" belgeseli. #belgesel"),icerik.get("etiketler",[p["konu"],"belgesel","tarih"]),p["yayin_iso"])
-        tg(f"<b>TAMAMLANDI!</b>\n\n<b>{icerik.get('baslik',p['konu'])}</b>\n\n{vid_url}\n\nYayin: <b>{p['yayin_dt'].strftime('%d.%m.%Y %H:%M')}</b>","🎉")
-        (WORK/"result.json").write_text(json.dumps({"status":"success","video_url":vid_url},ensure_ascii=False))
-    except Exception as e:
-        tg(f"<b>Hata:</b>\n{str(e)[:300]}","❌")
-        (WORK/"result.json").write_text(json.dumps({"status":"error","error":str(e)}))
-        sys.exit(1)
-
-if __name__=="__main__":
-    main()
