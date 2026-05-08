@@ -1,207 +1,232 @@
 #!/usr/bin/env python3
-"""Video Bot v10 - Final"""
+"""Video Bot English v1 - Everything in English"""
 
-import sys,os,json,time,requests,subprocess,re,struct,math
+import sys,os,json,time,requests,subprocess,re,struct,math,hashlib
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
 
-GEMINI_API_KEY=os.environ["GEMINI_API_KEY"]
-YOUTUBE_CLIENT_ID=os.environ["YOUTUBE_CLIENT_ID"]
-YOUTUBE_CLIENT_SECRET=os.environ["YOUTUBE_CLIENT_SECRET"]
-YOUTUBE_REFRESH_TOKEN=os.environ["YOUTUBE_REFRESH_TOKEN"]
-TELEGRAM_BOT_TOKEN=os.environ["TELEGRAM_BOT_TOKEN"]
-TELEGRAM_CHAT_ID=os.environ["TELEGRAM_CHAT_ID"]
+GEMINI_API_KEY        = os.environ["GEMINI_API_KEY"]
+YOUTUBE_CLIENT_ID     = os.environ["YOUTUBE_CLIENT_ID"]
+YOUTUBE_CLIENT_SECRET = os.environ["YOUTUBE_CLIENT_SECRET"]
+YOUTUBE_REFRESH_TOKEN = os.environ["YOUTUBE_REFRESH_TOKEN"]
+TELEGRAM_BOT_TOKEN    = os.environ["TELEGRAM_BOT_TOKEN"]
+TELEGRAM_CHAT_ID      = os.environ["TELEGRAM_CHAT_ID"]
 
-WORK=Path("./output")
+WORK = Path("./output")
 WORK.mkdir(exist_ok=True)
 
-GEMINI_MODELS=[("gemini-2.5-flash","v1beta"),("gemini-2.0-flash","v1"),("gemini-2.0-flash-lite","v1")]
+GEMINI_MODELS = [
+    ("gemini-2.5-flash","v1beta"),
+    ("gemini-2.0-flash","v1"),
+    ("gemini-2.0-flash-lite","v1"),
+]
 
-def tg(m,e=""):
-    t=f"{e} {m}".strip()
-    try: requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",json={"chat_id":TELEGRAM_CHAT_ID,"text":t,"parse_mode":"HTML"},timeout=10)
-    except: pass
-    print(t)
-
-def tg_foto(d,c):
+def tg(msg, emoji=""):
+    text = f"{emoji} {msg}".strip()
     try:
-        with open(d,"rb") as f:
-            requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",data={"chat_id":TELEGRAM_CHAT_ID,"caption":c,"parse_mode":"HTML"},files={"photo":f},timeout=30)
+        requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendMessage",
+            json={"chat_id":TELEGRAM_CHAT_ID,"text":text,"parse_mode":"HTML"},timeout=10)
+    except: pass
+    print(text)
+
+def tg_photo(path, caption):
+    try:
+        with open(path,"rb") as f:
+            requests.post(f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}/sendPhoto",
+                data={"chat_id":TELEGRAM_CHAT_ID,"caption":caption,"parse_mode":"HTML"},
+                files={"photo":f},timeout=30)
     except: pass
 
-def komut_isle(cmd):
-    p=[x.strip() for x in cmd.strip().split(",")]
-    if len(p)==5: konu,sure,resim,tarih,saat=p; vs=0
-    elif len(p)==6: konu,sure,resim,vs,tarih,saat=p; vs=int(vs)
-    else: raise ValueError("Format: Konu,Dakika,Resim,VideoSayisi,GG.AA.YYYY,SS:DD")
-    y=datetime.strptime(f"{tarih} {saat}","%d.%m.%Y %H:%M")
-    return {"konu":konu,"sure":int(sure),"resim":int(resim),"video_sayisi":vs,"yayin_dt":y,"yayin_iso":y.strftime("%Y-%m-%dT%H:%M:%S+00:00")}
+def parse_command(cmd):
+    p = [x.strip() for x in cmd.strip().split(",")]
+    if len(p) == 5:
+        topic,dur,imgs,date_s,time_s = p; vid_count = 0
+    elif len(p) == 6:
+        topic,dur,imgs,vid_count,date_s,time_s = p; vid_count = int(vid_count)
+    else:
+        raise ValueError("Format: Topic,Minutes,Images,Videos,DD.MM.YYYY,HH:MM")
+    pub = datetime.strptime(f"{date_s} {time_s}","%d.%m.%Y %H:%M")
+    return {"topic":topic,"duration":int(dur),"img_count":int(imgs),
+            "vid_count":vid_count,"publish_dt":pub,
+            "publish_iso":pub.strftime("%Y-%m-%dT%H:%M:%S+00:00")}
 
-def gemini(prompt,max_tokens=8192):
+def gemini(prompt, max_tokens=8192):
     for model,api in GEMINI_MODELS:
-        url=f"https://generativelanguage.googleapis.com/{api}/models/{model}:generateContent"
-        headers={"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY}
-        body={"contents":[{"parts":[{"text":prompt}]}],"generationConfig":{"temperature":0.7,"maxOutputTokens":max_tokens}}
+        url = f"https://generativelanguage.googleapis.com/{api}/models/{model}:generateContent"
+        headers = {"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY}
+        body = {"contents":[{"parts":[{"text":prompt}]}],
+                "generationConfig":{"temperature":0.7,"maxOutputTokens":max_tokens}}
         for _ in range(2):
             try:
-                r=requests.post(url,headers=headers,json=body,timeout=90)
-                if r.status_code==200:
-                    c=r.json().get("candidates",[])
+                r = requests.post(url,headers=headers,json=body,timeout=90)
+                if r.status_code == 200:
+                    c = r.json().get("candidates",[])
                     if c:
-                        t=c[0].get("content",{}).get("parts",[{}])[0].get("text","").strip()
+                        t = c[0].get("content",{}).get("parts",[{}])[0].get("text","").strip()
                         if t: return t,model
                     time.sleep(5)
-                elif r.status_code==429: time.sleep(15)
-                elif r.status_code==503: break
-                else: tg(f"{model}: {r.json().get('error',{}).get('message','')[:50]}","⚠"); break
+                elif r.status_code == 429: time.sleep(15)
+                elif r.status_code == 503: break
+                else:
+                    err = r.json().get("error",{}).get("message","")[:50]
+                    tg(f"{model}: {err}","⚠"); break
             except requests.Timeout: time.sleep(10)
-    raise Exception("Gemini yanit vermedi")
+    raise Exception("No Gemini model responded")
 
-def json_cikart(ham):
-    ham=re.sub(r"```json\s*|```\s*","",ham).strip()
-    try: return json.loads(ham)
+def parse_json(raw):
+    raw = re.sub(r"```json\s*|```\s*","",raw).strip()
+    try: return json.loads(raw)
     except: pass
-    s=ham.find("{"); e=ham.rfind("}")+1
+    s=raw.find("{"); e=raw.rfind("}")+1
     if s!=-1 and e>s:
-        seg=ham[s:e]
+        seg=raw[s:e]
         try: return json.loads(seg)
         except: pass
         try: return json.loads(re.sub(r"(?<=[^\s{,:\[])'(?=[^\s},:!'\]])", "",seg))
         except: pass
-    veri={}
-    for a,pat in [("baslik",r'"baslik"\s*:\s*"([^"]{1,120})"'),("aciklama",r'"aciklama"\s*:\s*"([^"]{1,800})"'),("thumbnail_metin",r'"thumbnail_metin"\s*:\s*"([^"]{1,50})"')]:
-        m=re.search(pat,ham)
-        if m: veri[a]=m.group(1)
-    tm=re.search(r'"etiketler"\s*:\s*\[(.*?)\]',ham,re.DOTALL)
-    if tm: veri["etiketler"]=re.findall(r'"([^"]+)"',tm.group(1))
-    if "baslik" in veri: return veri
-    raise Exception(f"JSON: {ham[:60]}")
+    data={}
+    for key,pat in [("title",r'"title"\s*:\s*"([^"]{1,120})"'),
+                    ("description",r'"description"\s*:\s*"([^"]{1,800})"'),
+                    ("thumbnail_text",r'"thumbnail_text"\s*:\s*"([^"]{1,50})"')]:
+        m=re.search(pat,raw)
+        if m: data[key]=m.group(1)
+    tm=re.search(r'"tags"\s*:\s*\[(.*?)\]',raw,re.DOTALL)
+    if tm: data["tags"]=re.findall(r'"([^"]+)"',tm.group(1))
+    if "title" in data: return data
+    raise Exception(f"JSON parse failed: {raw[:60]}")
 
-def telaffuz(metin):
-    for ing,tr in [(r'\bAI\b','Ay-Ay'),(r'\bYouTube\b','Yutub'),(r'\bGoogle\b','Gugil'),(r'\bNASA\b','Nasa'),(r'\bUSA\b','ABD'),(r'\bOK\b','tamam')]:
-        metin=re.sub(ing,tr,metin,flags=re.IGNORECASE)
-    return re.sub(r' +',' ',metin).strip()
+# ─── CONTENT GENERATION ──────────────────────────────────────────────────────
+def generate_content(topic, duration, img_count):
+    tg(f"Generating content for '{topic}'...","📚")
+    word_target = duration * 150
 
-def senaryo_uret(konu,sure,resim_sayisi,video_sayisi):
-    tg(f"'{konu}' icin icerik uretiliyor...","📚")
-    kelime=sure*160
-    k=konu.lower()
-    for c,r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]: k=k.replace(c,r)
-
-    mekan_sozlugu = {
-        "cin seddi": ["Great Wall of China ancient stone watchtower","Chinese fortress mountain mist","ancient Chinese battlefield landscape","Ming dynasty stone architecture"],
-        "osmanli": ["Ottoman Empire palace architecture","Byzantine Constantinople cityscape","Ottoman army fortress medieval","Topkapi palace golden era"],
-        "misir": ["ancient Egyptian pyramid Giza desert","Egyptian temple hieroglyphics stone","Nile river ancient civilization","Egyptian pharaoh tomb dark"],
-        "viking": ["Viking longship ocean storm","Norse village wooden houses","Viking battlefield axes shields","Scandinavian fjord dramatic landscape"],
-        "roma": ["ancient Roman Colosseum architecture","Roman legionnaire fortress","Roman aqueduct stone landscape","ancient Rome Forum ruins"],
-        "uzay": ["deep space nebula galaxy","space station orbit Earth","astronaut spacewalk cosmos","alien planet landscape dramatic"],
-        "doga": ["tropical rainforest waterfall","mountain glacier landscape dramatic","ocean waves cliffs dramatic","ancient forest mystical fog"],
+    location_map = {
+        "great wall": ["Great Wall of China ancient stone watchtower mountain mist","Ming dynasty fortress dramatic clouds","ancient Chinese battlefield landscape epic lighting"],
+        "ottoman": ["Ottoman Empire palace architecture golden era","Constantinople Byzantine cityscape dramatic","Ottoman army fortress medieval stone"],
+        "egypt": ["ancient Egyptian pyramid Giza desert sunrise","Egyptian temple hieroglyphics stone dramatic","Nile river ancient civilization golden light"],
+        "viking": ["Viking longship stormy ocean dramatic","Norse village wooden houses snow landscape","Viking battlefield epic landscape Scandinavia"],
+        "roman": ["ancient Roman Colosseum architecture epic","Roman legionnaire fortress dramatic lighting","ancient Rome Forum ruins golden hour"],
+        "space": ["deep space nebula galaxy ultra detailed","space station orbit Earth dramatic lighting","astronaut spacewalk cosmos cinematic"],
+        "nature": ["tropical rainforest waterfall dramatic light","mountain glacier landscape epic dramatic","ocean waves cliffs cinematic dramatic"],
+        "world war": ["World War battlefield dramatic landscape","military fortress ruins dramatic atmosphere","wartime landscape dramatic moody"],
     }
 
-    bulunan = []
-    for anahtar, promptlar in mekan_sozlugu.items():
-        if anahtar in k:
-            bulunan = promptlar
-            break
-
-    if not bulunan:
-        bulunan = [
-            f"ancient {konu} landscape dramatic architecture no people",
-            f"historical {konu} ruins stone dramatic lighting no people",
-            f"epic {konu} environment cinematic landscape",
-            f"mystical {konu} ancient site dramatic atmosphere",
+    k = topic.lower()
+    found = []
+    for key,imgs in location_map.items():
+        if key in k: found = imgs; break
+    if not found:
+        found = [
+            f"{topic} dramatic landscape ancient architecture no people cinematic 8k",
+            f"{topic} historical ruins dramatic lighting epic cinematic no people",
+            f"{topic} epic environment wide shot dramatic clouds cinematic",
+            f"{topic} mystical ancient site atmospheric dramatic no people",
         ]
 
-    gorseller=[]
-    for i in range(resim_sayisi):
-        base = bulunan[i % len(bulunan)]
-        if i % 3 == 2:
-            base += ", aerial view, wide shot, dramatic clouds"
-        elif i % 3 == 1:
-            base += ", close up detail, dramatic shadow, golden hour"
-        gorseller.append(base)
+    prompts = []
+    for i in range(img_count):
+        base = found[i % len(found)]
+        if i % 3 == 1: base += ", golden hour warm light, wide angle"
+        elif i % 3 == 2: base += ", aerial view dramatic clouds, cinematic"
+        prompts.append(base)
 
-    meta={"baslik":f"{konu}: Tarihin Gizli Sirri!","aciklama":f"{konu} hakkinda kapsamli Turkce belgesel. #belgesel #tarih #{konu.replace(' ','')}","etiketler":[konu,"belgesel","tarih","youtube","turkce","egitim","gizem","kesfet"],"gorseller":gorseller,"thumbnail_metin":konu.upper()[:15],"thumbnail_prompt":f"{konu} epic dramatic historical cinematic no text","renk":"#1a1a2e"}
-    tg("SEO optimize ediliyor...","📋")
+    meta = {
+        "title": f"{topic}: The Untold Story! 🏛️",
+        "description": f"Discover the incredible story of {topic} in this comprehensive documentary. #documentary #history #{topic.replace(' ','')}",
+        "tags": [topic,"documentary","history","youtube","education","mystery","ancient","epic"],
+        "image_prompts": prompts,
+        "thumbnail_text": topic.upper()[:15],
+        "thumbnail_prompt": f"{topic} epic dramatic cinematic no text no people",
+        "color": "#1a1a2e"
+    }
+
+    tg("Optimizing SEO...","📋")
     try:
-        h,model=gemini(f"YouTube belgesel. Konu: {konu}. {sure} dk. Apostrof yok. JSON: {{\"baslik\":\"etkileyici 55 karakter emoji\",\"aciklama\":\"400 karakter hashtag\",\"etiketler\":[\"e1\",\"e2\",\"e3\",\"e4\",\"e5\",\"e6\",\"e7\",\"e8\"],\"thumbnail_metin\":\"3 KELIME\"}}",max_tokens=512)
-        mini=json_cikart(h)
-        for k in ["baslik","aciklama","etiketler","thumbnail_metin"]:
-            if mini.get(k): meta[k]=mini[k]
-        tg(f"SEO hazir: <b>{meta['baslik']}</b>","✅")
-    except: tg("SEO varsayilan","⚠")
-    tg(f"Senaryo yaziliyor ({kelime} kelime)...","📝")
-    senaryo=""
+        p1 = f"""YouTube documentary about: {topic}. Duration: {duration} minutes.
+Return only this JSON (no apostrophes in values):
+{{"title":"engaging title max 60 chars with emoji","description":"400 char description with #hashtags","tags":["tag1","tag2","tag3","tag4","tag5","tag6","tag7","tag8"],"thumbnail_text":"MAX 3 WORDS"}}"""
+        raw,model = gemini(p1,max_tokens=512)
+        mini = parse_json(raw)
+        for k2 in ["title","description","tags","thumbnail_text"]:
+            if mini.get(k2): meta[k2] = mini[k2]
+        tg(f"SEO ready ({model}): <b>{meta['title']}</b>","✅")
+    except:
+        tg("SEO using defaults","⚠")
+
+    tg(f"Writing script ({word_target} words)...","📝")
+    p2 = f"""You are a professional documentary narrator. Write a script about: {topic}
+
+STRICT RULES:
+- Write ONLY the narration text, nothing else
+- No scene directions, no music cues, no [brackets], no stage directions
+- No "Narrator:", no headers, no bullet points
+- Write approximately {word_target} words
+- Style: National Geographic documentary - engaging, dramatic, informative
+- Pure flowing prose paragraphs only
+
+Begin the {topic} documentary narration now:"""
+
+    script = ""
     for _ in range(4):
         try:
-            prompt_s=f"""Sen bir belgesel anlaticisisin. {konu} hakkinda {sure} dakikalik bir belgesel icin metin yazacaksin.
-
-KESIN KURALLAR:
-- Sadece duz Turkce anlatim metni yaz
-- Hicbir sahne yonergesi, muzik notu, anlatici etiketi yazma
-- Parantez icinde hicbir sey olmasin
-- Apostrof kullanma, emoji kullanma
-- Baslik veya alt baslik kullanma
-
-{kelime} kelimelik duz Turkce metin yaz:"""
-            h,model=gemini(prompt_s,max_tokens=8192)
-            for bad in ["Giris Muzigi","Kapanis muzigi","Jenerik","Anlatici:","Kelime Sayimi","Iste bu","Simdi yaziyorum","tarzinda","belgesel metni:"]:
-                h=re.sub(bad,'',h,flags=re.IGNORECASE)
-            h=re.sub(r'\[.*?\]','',h,flags=re.DOTALL)
-            h=re.sub(r'\(.*?\)','',h,flags=re.DOTALL)
-            h=re.sub(r'^#+\s.*$','',h,flags=re.MULTILINE)
-            h=re.sub(r'\*+','',h)
-            h=re.sub(r'\n{3,}','\n\n',h).strip()
-            if len(h.split())>200: senaryo=h; tg(f"Senaryo hazir ({model}): <b>{len(h.split())} kelime</b>","✅"); break
+            raw,model = gemini(p2,max_tokens=8192)
+            raw = re.sub(r'\[.*?\]','',raw,flags=re.DOTALL)
+            raw = re.sub(r'\(.*?music.*?\)','',raw,flags=re.IGNORECASE|re.DOTALL)
+            raw = re.sub(r'Narrator\s*:','',raw,flags=re.IGNORECASE)
+            raw = re.sub(r'^\*+\s*|^#+\s.*$','',raw,flags=re.MULTILINE)
+            raw = re.sub(r'\n{3,}','\n\n',raw).strip()
+            if len(raw.split()) > 200:
+                script = raw
+                tg(f"Script ready ({model}): <b>{len(raw.split())} words</b>","✅")
+                break
             time.sleep(5)
-        except Exception as e: tg(f"Senaryo: {str(e)[:50]}","⚠"); time.sleep(10)
-    if not senaryo: senaryo=f"{konu} tarihin en onemli konularindan biridir."
-    meta["senaryo"]=telaffuz(senaryo)
-    tg(f"Toplam: <b>{len(senaryo.split())} kelime</b>","📊")
+        except Exception as e:
+            tg(f"Script error: {str(e)[:50]}","⚠"); time.sleep(10)
+
+    if not script:
+        script = f"{topic} is one of the most fascinating subjects in human history."
+
+    meta["script"] = script
+    tg(f"Total: <b>{len(script.split())} words</b>","📊")
     return meta
 
-def muzik_uret(konu, sure_sn):
-    tg("Muzik uretiliyor...", "🎵")
-    wav = WORK / "muzik.wav"
-    mp3 = WORK / "muzik.mp3"
+# ─── MUSIC ───────────────────────────────────────────────────────────────────
+def generate_music(topic, duration_sec):
+    tg("Generating music...","🎵")
+    wav = WORK/"music.wav"; mp3 = WORK/"music.mp3"
+    k = topic.lower()
+    seed_val = int(hashlib.md5(topic.encode()).hexdigest()[:8],16) % 1000
 
-    k = konu.lower()
-    for c, r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]:
-        k = k.replace(c, r)
-
-    import hashlib
-    seed_val = int(hashlib.md5(konu.encode()).hexdigest()[:8], 16) % 1000
-
-    if any(x in k for x in ["viking","savas","osmanli","roma","selcuklu","tarih","cin","mogol"]):
+    if any(x in k for x in ["war","battle","viking","roman","ottoman","medieval","samurai","mongol","crusade"]):
         kategoriler = [
             {"base":[55,110,165,220,82],"amps":[0.28,0.18,0.12,0.07,0.20],"chords":[1.0,1.12,0.94,1.06],"dur":6,"label":"epic_1"},
             {"base":[41,82,123,165,55], "amps":[0.26,0.20,0.13,0.06,0.22],"chords":[1.0,1.19,0.89,1.12],"dur":5,"label":"epic_2"},
             {"base":[55,110,220,165,82],"amps":[0.24,0.18,0.15,0.08,0.20],"chords":[1.0,1.06,1.12,0.94],"dur":7,"label":"epic_3"},
         ]
         bpm = 80
-    elif any(x in k for x in ["misir","antik","yunan","sumer","babil","mezopotamya"]):
+    elif any(x in k for x in ["egypt","ancient","greek","sumerian","babylon","mesopotamia","pharaoh"]):
         kategoriler = [
             {"base":[174,261,348,130,87],"amps":[0.22,0.17,0.12,0.10,0.18],"chords":[1.0,1.12,1.26,1.06],"dur":8,"label":"ancient_1"},
             {"base":[196,294,392,147,98],"amps":[0.20,0.16,0.13,0.11,0.17],"chords":[1.0,1.19,0.94,1.12],"dur":7,"label":"ancient_2"},
             {"base":[164,246,328,123,82],"amps":[0.24,0.17,0.11,0.09,0.19],"chords":[1.0,1.06,1.19,0.89],"dur":6,"label":"ancient_3"},
         ]
         bpm = 65
-    elif any(x in k for x in ["uzay","yapay","teknoloji","bilim","robot","gelecek"]):
+    elif any(x in k for x in ["space","technology","ai","future","science","robot","digital"]):
         kategoriler = [
             {"base":[220,330,440,550,110],"amps":[0.18,0.14,0.10,0.06,0.16],"chords":[1.0,1.12,1.33,1.06],"dur":9,"label":"space_1"},
             {"base":[196,294,392,490,98], "amps":[0.20,0.15,0.11,0.05,0.15],"chords":[1.0,1.19,1.06,1.26],"dur":8,"label":"space_2"},
             {"base":[233,349,466,582,116],"amps":[0.16,0.13,0.12,0.07,0.17],"chords":[1.0,1.06,1.33,0.94],"dur":10,"label":"space_3"},
         ]
         bpm = 90
-    elif any(x in k for x in ["doga","hayvan","deniz","orman","okyanus"]):
+    elif any(x in k for x in ["nature","ocean","forest","animal","wildlife","earth"]):
         kategoriler = [
             {"base":[196,261,329,392,130],"amps":[0.18,0.14,0.12,0.08,0.16],"chords":[1.0,1.12,1.25,1.06],"dur":8,"label":"nature_1"},
             {"base":[174,232,293,349,116],"amps":[0.20,0.15,0.11,0.07,0.15],"chords":[1.0,1.19,1.06,1.12],"dur":7,"label":"nature_2"},
             {"base":[207,276,347,415,138],"amps":[0.16,0.13,0.13,0.09,0.17],"chords":[1.0,1.06,1.19,0.94],"dur":9,"label":"nature_3"},
         ]
         bpm = 60
-    elif any(x in k for x in ["gizem","korku","paranormal","komplo","karanlik"]):
+    elif any(x in k for x in ["mystery","secret","conspiracy","paranormal","dark","unknown"]):
         kategoriler = [
             {"base":[73,110,155,207,87], "amps":[0.22,0.16,0.11,0.07,0.20],"chords":[1.0,1.06,0.89,1.12],"dur":7,"label":"mystery_1"},
             {"base":[65,98,138,184,77],  "amps":[0.24,0.17,0.10,0.06,0.21],"chords":[1.0,0.94,1.06,1.19],"dur":6,"label":"mystery_2"},
@@ -223,125 +248,123 @@ def muzik_uret(konu, sure_sn):
     chord_dur  = cfg["dur"]
     label      = cfg["label"]
 
-    sr          = 44100
-    dur         = int(min(sure_sn + 30, 7200))
-    n           = sr * dur
-    fade        = sr * 3
-    beat_period = int(sr * 60 / bpm)
-    beat_env_len= int(sr * 0.20)
+    sr           = 44100
+    dur          = int(min(duration_sec + 30, 7200))
+    n            = sr * dur
+    fade         = sr * 3
+    beat_period  = int(sr * 60 / bpm)
+    beat_env_len = int(sr * 0.20)
 
     def smooth_env(pos, length):
         if pos >= length: return 0.0
         return math.sin(math.pi * pos / length) ** 2
 
     try:
-        with open(wav, 'wb') as f:
+        with open(wav,'wb') as f:
             dsize = n * 2
-            f.write(b'RIFF'); f.write(struct.pack('<I', 36 + dsize))
-            f.write(b'WAVEfmt '); f.write(struct.pack('<I', 16))
-            f.write(struct.pack('<H', 1)); f.write(struct.pack('<H', 1))
-            f.write(struct.pack('<I', sr)); f.write(struct.pack('<I', sr * 2))
-            f.write(struct.pack('<H', 2)); f.write(struct.pack('<H', 16))
-            f.write(b'data'); f.write(struct.pack('<I', dsize))
+            f.write(b'RIFF'); f.write(struct.pack('<I',36+dsize))
+            f.write(b'WAVEfmt '); f.write(struct.pack('<I',16))
+            f.write(struct.pack('<H',1)); f.write(struct.pack('<H',1))
+            f.write(struct.pack('<I',sr)); f.write(struct.pack('<I',sr*2))
+            f.write(struct.pack('<H',2)); f.write(struct.pack('<H',16))
+            f.write(b'data'); f.write(struct.pack('<I',dsize))
 
-            for start in range(0, n, sr):
-                end = min(start + sr, n)
-                buf = []
-                for i in range(start, end):
-                    t = i / sr
+            for start in range(0,n,sr):
+                end = min(start+sr,n); buf = []
+                for i in range(start,end):
+                    t = i/sr
 
                     # Chord progression
-                    chord_idx = int(t / chord_dur) % len(chords)
+                    chord_idx = int(t/chord_dur) % len(chords)
                     chord_pos = t % chord_dur
                     xfade = 0.5
                     if chord_pos < xfade:
-                        prev_idx   = (chord_idx - 1) % len(chords)
+                        prev_idx   = (chord_idx-1) % len(chords)
                         blend      = chord_pos / xfade
-                        multiplier = chords[prev_idx] * (1 - blend) + chords[chord_idx] * blend
+                        multiplier = chords[prev_idx]*(1-blend) + chords[chord_idx]*blend
                     else:
                         multiplier = chords[chord_idx]
 
-                    # Ana harmonikler
-                    v = sum(a * math.sin(2 * math.pi * fr * multiplier * t)
-                            for a, fr in zip(amps, base_freqs))
+                    # Main harmonics
+                    v = sum(a*math.sin(2*math.pi*fr*multiplier*t) for a,fr in zip(amps,base_freqs))
 
-                    # 3. harmonik - dolgunluk
-                    v += amps[0] * 0.08 * math.sin(2 * math.pi * base_freqs[0] * multiplier * 3 * t)
+                    # 3rd harmonic - fullness
+                    v += amps[0]*0.08*math.sin(2*math.pi*base_freqs[0]*multiplier*3*t)
 
-                    # Ritim - smooth envelope, patlama yok
+                    # Rhythm - smooth envelope, no pops
                     pos_in_beat = i % beat_period
-                    v += 0.10 * smooth_env(pos_in_beat, beat_env_len) * math.sin(2 * math.pi * 70 * multiplier * t)
+                    v += 0.10*smooth_env(pos_in_beat,beat_env_len)*math.sin(2*math.pi*70*multiplier*t)
 
-                    # Hafif tremolo
-                    v *= (1 + 0.02 * math.sin(2 * math.pi * 0.15 * t))
+                    # Subtle tremolo
+                    v *= (1+0.02*math.sin(2*math.pi*0.15*t))
 
                     # Fade in/out
-                    if i < fade:   v *= i / fade
-                    elif i > n - fade: v *= (n - i) / fade
+                    if i < fade:       v *= i/fade
+                    elif i > n-fade:   v *= (n-i)/fade
 
-                    buf.append(struct.pack('<h', int(max(-0.85, min(0.85, v)) * 32767)))
-
+                    buf.append(struct.pack('<h',int(max(-0.85,min(0.85,v))*32767)))
                 f.write(b''.join(buf))
 
         r = subprocess.run(
-            ["ffmpeg", "-y", "-i", str(wav),
-             "-af", "volume=2.0,highpass=f=40,lowpass=f=8000",
-             "-c:a", "mp3", "-b:a", "128k", str(mp3)],
-            capture_output=True, text=True, timeout=180
-        )
-        if r.returncode == 0 and mp3.exists() and mp3.stat().st_size > 1000:
-            kb = mp3.stat().st_size // 1024
-            tg(f"Muzik hazir! ({label}, {bpm}bpm, {kb}KB)", "✅")
+            ["ffmpeg","-y","-i",str(wav),
+             "-af","volume=2.0,highpass=f=40,lowpass=f=8000",
+             "-c:a","mp3","-b:a","128k",str(mp3)],
+            capture_output=True,text=True,timeout=180)
+        if r.returncode==0 and mp3.exists() and mp3.stat().st_size>1000:
+            kb = mp3.stat().st_size//1024
+            tg(f"Music ready! ({label}, {bpm}bpm, {kb}KB)","✅")
             return str(mp3)
-
     except Exception as e:
-        tg(f"Muzik hatasi: {str(e)[:60]}", "⚠")
+        tg(f"Music error: {str(e)[:60]}","⚠")
     return ""
 
-def gorsel_indir(i,prompt,toplam,konu=""):
-    yol=WORK/f"img_{i+1:02d}.jpg"
-    kisa = prompt[:80].replace('"','').replace("'",'')
-    tam_prompt = f"{kisa}, no people, no humans, no cars, no vehicles, cinematic landscape architecture 8k dramatic lighting"
+# ─── IMAGES ──────────────────────────────────────────────────────────────────
+def download_image(i, prompt, total, topic=""):
+    path = WORK/f"img_{i+1:02d}.jpg"
+    clean = prompt[:120].replace('"','').replace("'",'')
+    full_prompt = f"{clean}, no people, no humans, no cars, cinematic landscape 8k dramatic lighting"
 
     for seed in [i*7+42, i*13+17, i*3+99]:
-        enc=quote(tam_prompt[:200])
-        url=f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true&model=flux&enhance=true"
+        enc = quote(full_prompt[:200])
+        url = f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true&model=flux"
         try:
-            r=requests.get(url,timeout=90)
+            r = requests.get(url,timeout=90)
             if r.status_code==200 and len(r.content)>10000 and r.content[:2]==b'\xff\xd8':
-                yol.write_bytes(r.content)
-                tg(f"Gorsel {i+1}/{toplam} ✓","🖼")
+                path.write_bytes(r.content)
+                tg(f"Image {i+1}/{total} ✓","🖼")
                 time.sleep(6)
-                return str(yol)
+                return str(path)
             if r.status_code==429: time.sleep(30)
             else: time.sleep(8)
         except: time.sleep(8)
 
-    renkler=["0x3D1C02","0x4A0E0E","0x0A1628","0x2D1B69","0x003333","0x1A3A1A","0x330033","0x1A1A00"]
-    subprocess.run(["ffmpeg","-y","-f","lavfi","-i",f"color=c={renkler[i%len(renkler)]}:size=1920x1080:rate=1","-vframes","1","-q:v","2",str(yol)],capture_output=True)
-    tg(f"Gorsel {i+1} yedek","⚠")
-    return str(yol)
+    colors=["0x3D1C02","0x4A0E0E","0x0A1628","0x2D1B69","0x003333","0x1A3A1A","0x330033","0x1A1A00"]
+    subprocess.run(["ffmpeg","-y","-f","lavfi","-i",f"color=c={colors[i%len(colors)]}:size=1920x1080:rate=1","-vframes","1","-q:v","2",str(path)],capture_output=True)
+    tg(f"Image {i+1} fallback color","⚠")
+    return str(path)
 
-def gorseller_uret(promptlar,konu=""):
-    n=len(promptlar)
-    tg(f"{n} gorsel uretiliyor (sirali, konuya ozgu)...","🎨")
-    return [gorsel_indir(i,p,n,konu) for i,p in enumerate(promptlar)]
+def generate_images(prompts, topic=""):
+    n = len(prompts)
+    tg(f"Generating {n} images (sequential)...","🎨")
+    return [download_image(i,p,n,topic) for i,p in enumerate(prompts)]
 
-def thumbnail_uret(prompt,metin,renk,konu):
-    tg("Thumbnail uretiliyor...","🖼")
-    enc=quote(f"{prompt}, youtube thumbnail dramatic vibrant no text")
+# ─── THUMBNAIL ───────────────────────────────────────────────────────────────
+def generate_thumbnail(prompt, text, color, topic):
+    tg("Generating thumbnail...","🖼")
+    enc=quote(f"{prompt}, youtube thumbnail dramatic vibrant no text no people")
     url=f"https://image.pollinations.ai/prompt/{enc}?width=1280&height=720&seed=777&nologo=true&model=flux"
     base=WORK/"thumb_base.jpg"; final=WORK/"thumbnail.jpg"
     for _ in range(3):
         try:
             r=requests.get(url,timeout=60)
-            if r.status_code==200 and len(r.content)>5000 and r.content[:2]==b'\xff\xd8': base.write_bytes(r.content); break
+            if r.status_code==200 and len(r.content)>5000 and r.content[:2]==b'\xff\xd8':
+                base.write_bytes(r.content); break
             time.sleep(10)
         except: time.sleep(10)
     else:
-        subprocess.run(["ffmpeg","-y","-f","lavfi","-i",f"color=c={renk.replace('#','0x')}:size=1280x720:rate=1","-vframes","1",str(base)],capture_output=True)
-    m=metin.upper()[:25].replace("'","").replace(":","\\:")
-    k=konu.upper()[:20].replace("'","").replace(":","\\:")
+        subprocess.run(["ffmpeg","-y","-f","lavfi","-i",f"color=c={color.replace('#','0x')}:size=1280x720:rate=1","-vframes","1",str(base)],capture_output=True)
+    m=text.upper()[:25].replace("'","").replace(":","\\:")
+    k=topic.upper()[:20].replace("'","").replace(":","\\:")
     fs=80 if len(m)<=10 else 60 if len(m)<=18 else 44
     vf=(f"drawbox=x=0:y=ih*0.58:w=iw:h=ih*0.42:color=black@0.72:t=fill,"
         f"drawtext=text='{m}':fontsize={fs}:fontcolor=black@0.4:x=(w-text_w)/2+2:y=h*0.62+2:font=DejaVu Sans:style=Bold,"
@@ -349,66 +372,244 @@ def thumbnail_uret(prompt,metin,renk,konu):
         f"drawtext=text='{k}':fontsize=30:fontcolor=yellow:x=20:y=20:font=DejaVu Sans:style=Bold")
     r=subprocess.run(["ffmpeg","-y","-i",str(base),"-vf",vf,"-q:v","2",str(final)],capture_output=True)
     if r.returncode!=0 or not final.exists(): subprocess.run(["cp",str(base),str(final)])
-    if final.exists(): tg_foto(str(final),f"Thumbnail: {m}")
-    tg("Thumbnail hazir!","✅"); return str(final)
+    if final.exists(): tg_photo(str(final),f"Thumbnail: {m}")
+    tg("Thumbnail ready!","✅")
+    return str(final)
 
-def ses_uret(senaryo):
-    tg("Derin belgesel sesi sentezleniyor...","🎙")
-    sf=WORK/"senaryo.txt"; rf=WORK/"ses_ham.mp3"; ff=WORK/"ses.mp3"
-    sub_vtt=WORK/"altyazi.vtt"; sub_srt=WORK/"altyazi.srt"
-    sf.write_text(senaryo,encoding="utf-8")
-    for rate,pitch,vol in [("-8%","-10Hz","+15%"),("-5%","-5Hz","+10%"),("0%","0Hz","0%")]:
-        r=subprocess.run(["edge-tts","--voice","tr-TR-EmelNeural","--file",str(sf),"--write-media",str(rf),"--write-subtitles",str(sub_vtt),f"--rate={rate}",f"--pitch={pitch}",f"--volume={vol}"],capture_output=True,text=True,timeout=600)
-        if r.returncode==0 and rf.exists() and rf.stat().st_size>1000: tg(f"Ses uretildi (rate={rate})","✅"); break
-        time.sleep(3)
-    else:
-        r2=subprocess.run(["edge-tts","--voice","tr-TR-EmelNeural","--file",str(sf),"--write-media",str(rf),"--write-subtitles",str(sub_vtt)],capture_output=True,text=True,timeout=600)
-        if r2.returncode!=0 or not rf.exists(): raise Exception(f"TTS: {r2.stderr[-80:]}")
-    subprocess.run(["ffmpeg","-y","-i",str(rf),"-af","equalizer=f=80:width_type=o:width=2:g=5,equalizer=f=200:width_type=o:width=2:g=3,equalizer=f=3000:width_type=o:width=2:g=-3,equalizer=f=8000:width_type=o:width=2:g=-5,acompressor=threshold=-16dB:ratio=3:attack=5:release=60,volume=1.3","-c:a","mp3","-b:a","192k",str(ff)],capture_output=True)
-    kullan=str(ff) if ff.exists() else str(rf)
+# ─── AUDIO + SUBTITLES ───────────────────────────────────────────────────────
+def generate_audio(script):
+    tg("Generating English narration (Guy - deep voice)...","🎙")
+    sf=WORK/"script.txt"; rf=WORK/"audio_raw.mp3"
+    sub_vtt=WORK/"subtitles.vtt"; sub_srt=WORK/"subtitles.srt"
+    sf.write_text(script,encoding="utf-8")
+
+    r=subprocess.run(["edge-tts","--voice","en-US-GuyNeural",
+        "--file",str(sf),"--write-media",str(rf),
+        "--write-subtitles",str(sub_vtt)],
+        capture_output=True,text=True,timeout=600)
+    if r.returncode!=0 or not rf.exists():
+        raise Exception(f"TTS failed: {r.stderr[-80:]}")
+    tg("Audio generated (Guy Neural)","✅")
+
     if sub_vtt.exists():
-        vtt=sub_vtt.read_text(encoding="utf-8"); srt=[]; say=1
-        for blok in re.split(r'\n\n+',vtt):
-            if '-->' in blok:
-                sat=blok.strip().split('\n')
-                zaman=next((s for s in sat if '-->' in s),None)
-                if zaman:
-                    zaman=re.sub(r'(\d{2}:\d{2}:\d{2})\.(\d{3})',r'\1,\2',zaman).strip()
-                    mt=[s for s in sat if '-->' not in s and s.strip() and not s.startswith('NOTE') and not s.strip().isdigit()]
-                    if mt: srt+=[str(say),zaman]+mt+['']; say+=1
+        vtt=sub_vtt.read_text(encoding="utf-8"); srt=[]; count=1
+        for block in re.split(r'\n\n+',vtt):
+            if '-->' in block:
+                lines=block.strip().split('\n')
+                timing=next((s for s in lines if '-->' in s),None)
+                if timing:
+                    timing=re.sub(r'(\d{2}:\d{2}:\d{2})\.(\d{3})',r'\1,\2',timing).strip()
+                    text_lines=[s for s in lines if '-->' not in s and s.strip()
+                                and not s.startswith('NOTE') and not s.strip().isdigit()]
+                    if text_lines:
+                        srt+=[str(count),timing]+text_lines+['']; count+=1
         sub_srt.write_text('\n'.join(srt),encoding="utf-8")
-    probe=subprocess.run(["ffprobe","-v","quiet","-print_format","json","-show_format",kullan],capture_output=True,text=True)
-    sure=float(json.loads(probe.stdout)["format"]["duration"])
-    tg(f"Ses hazir! Sure: <b>{sure/60:.1f} dakika</b>","✅")
-    return kullan,sure,str(sub_srt) if sub_srt.exists() else ""
 
-def ses_miksle(anlati,muzik,sure):
-    if not muzik or not os.path.exists(muzik):
-        tg("Muzik yok","⚠"); return anlati
+    probe=subprocess.run(["ffprobe","-v","quiet","-print_format","json","-show_format",str(rf)],capture_output=True,text=True)
+    duration=float(json.loads(probe.stdout)["format"]["duration"])
+    tg(f"Audio ready! Duration: <b>{duration/60:.1f} minutes</b>","✅")
+    return str(rf), duration, str(sub_srt) if sub_srt.exists() else ""
+
+# ─── MUSIC MIX ───────────────────────────────────────────────────────────────
+def mix_audio(narration, music, duration):
+    if not music or not os.path.exists(music):
+        tg("No music file","⚠"); return narration
     try:
-        pb=subprocess.run(["ffprobe","-v","quiet","-print_format","json",
-            "-show_format",muzik],capture_output=True,text=True)
+        pb=subprocess.run(["ffprobe","-v","quiet","-print_format","json","-show_format",music],capture_output=True,text=True)
         ms=float(json.loads(pb.stdout)["format"]["duration"])
-        if ms<3: tg("Muzik cok kisa","⚠"); return anlati
-        tg(f"Muzik {ms:.0f}sn, karistiriliyor...","🎚")
-    except Exception as e:
-        tg(f"Muzik probe hatasi: {e}","⚠"); return anlati
+        if ms<3: return narration
+        tg(f"Mixing audio + music ({ms:.0f}s music)...","🎚")
+    except: return narration
 
-    miksl=WORK/"miksl.mp3"
+    mixed=WORK/"mixed.mp3"
     cmd=["ffmpeg","-y",
-         "-i",anlati,
-         "-stream_loop","-1","-i",muzik,
+         "-i",narration,
+         "-stream_loop","-1","-i",music,
          "-filter_complex",
          "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
          "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.4[a2];"
          "[a1][a2]amix=inputs=2:duration=first:weights=1 0.6[aout]",
          "-map","[aout]",
          "-c:a","libmp3lame","-b:a","192k",
-         "-t",str(int(sure)+2),
-         str(miksl)]
+         "-t",str(int(duration)+2),
+         str(mixed)]
     r=subprocess.run(cmd,capture_output=True,text=True,timeout=600)
-    if r.returncode==0 and miksl.exists() and miksl.stat().st_size>50000:
-        tg(f"Muzik eklendi! ({miksl.stat().st_size//1024}KB)","✅")
-        return str(miksl)
-    tg("Miksaj hatasi, muzik olmadan devam","⚠")
-    return anlati
+    if r.returncode==0 and mixed.exists() and mixed.stat().st_size>50000:
+        tg(f"Music mixed! ({mixed.stat().st_size//1024}KB)","✅")
+        return str(mixed)
+    tg(f"Mix failed, continuing without music","⚠")
+    return narration
+
+# ─── VIDEO ASSEMBLY ───────────────────────────────────────────────────────────
+def assemble_video(images, audio, subtitle_srt, total_duration):
+    tg(f"Assembling video...\n{len(images)} images | 6 effects\n⏳ ~{len(images)//2+5} min","🎬")
+
+    img_dur = total_duration / len(images)
+    effects = ["zoompan=z='min(zoom+0.0008,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+               "zoompan=z='if(lte(zoom,1.0),1.3,max(1.0,zoom-0.0008))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
+               "zoompan=z='1.15':x='if(lte(on,1),0,x+0.5)':y='ih/2-(ih/zoom/2)'",
+               "zoompan=z='1.15':x='if(lte(on,1),iw,x-0.5)':y='ih/2-(ih/zoom/2)'",
+               "zoompan=z='1.15':x='iw/2-(iw/zoom/2)':y='if(lte(on,1),0,y+0.3)'",
+               "zoompan=z='1.15':x='iw/2-(iw/zoom/2)':y='if(lte(on,1),ih,y-0.3)'"]
+
+    clips = []
+    for idx,img in enumerate(images):
+        clip = WORK/f"clip_{idx:02d}.mp4"
+        eff  = effects[idx % len(effects)]
+        fps  = 25
+        frames = int(img_dur * fps)
+        vf = (f"{eff}:d={frames}:s=1920x1080:fps={fps},"
+              f"vignette=PI/4,"
+              f"format=yuv420p")
+        r=subprocess.run(["ffmpeg","-y","-loop","1","-i",img,
+            "-vf",vf,"-t",str(img_dur),
+            "-c:v","libx264","-preset","fast","-crf","23",
+            "-r",str(fps),str(clip)],
+            capture_output=True,text=True,timeout=300)
+        if r.returncode==0 and clip.exists():
+            clips.append(str(clip))
+            tg(f"Clip {idx+1}/{len(images)} ✓","🎞")
+        else:
+            tg(f"Clip {idx+1} failed","⚠")
+
+    if not clips:
+        raise Exception("No clips generated")
+
+    # Concat
+    concat_list = WORK/"concat.txt"
+    concat_list.write_text('\n'.join(f"file '{c}'" for c in clips))
+    raw_video = WORK/"video_raw.mp4"
+    r=subprocess.run(["ffmpeg","-y","-f","concat","-safe","0",
+        "-i",str(concat_list),"-c:v","copy",str(raw_video)],
+        capture_output=True,text=True,timeout=3600)
+    if r.returncode!=0 or not raw_video.exists():
+        raise Exception(f"Concat failed: {r.stderr[-100:]}")
+
+    # Add audio + subtitles
+    final_video = WORK/"final_video.mp4"
+    if subtitle_srt and os.path.exists(subtitle_srt):
+        srt_escaped = str(subtitle_srt).replace('\\','/').replace(':','\\:')
+        vf_sub = (f"subtitles={srt_escaped}:force_style='"
+                  f"FontSize=14,PrimaryColour=&H00FFFF00,"
+                  f"OutlineColour=&H00000000,Outline=2,"
+                  f"Alignment=2,MarginV=30'")
+        r=subprocess.run(["ffmpeg","-y","-i",str(raw_video),"-i",audio,
+            "-vf",vf_sub,"-c:v","libx264","-preset","fast","-crf","23",
+            "-c:a","aac","-b:a","192k","-shortest",str(final_video)],
+            capture_output=True,text=True,timeout=7200)
+    else:
+        r=subprocess.run(["ffmpeg","-y","-i",str(raw_video),"-i",audio,
+            "-c:v","copy","-c:a","aac","-b:a","192k","-shortest",str(final_video)],
+            capture_output=True,text=True,timeout=7200)
+
+    if r.returncode!=0 or not final_video.exists():
+        raise Exception(f"Final video failed: {r.stderr[-100:]}")
+
+    size_mb = final_video.stat().st_size//(1024*1024)
+    tg(f"Video ready! {size_mb}MB","✅")
+    return str(final_video)
+
+# ─── YOUTUBE UPLOAD ───────────────────────────────────────────────────────────
+def get_access_token():
+    r=requests.post("https://oauth2.googleapis.com/token",data={
+        "client_id":YOUTUBE_CLIENT_ID,"client_secret":YOUTUBE_CLIENT_SECRET,
+        "refresh_token":YOUTUBE_REFRESH_TOKEN,"grant_type":"refresh_token"},timeout=30)
+    return r.json()["access_token"]
+
+def upload_youtube(video_path, meta, publish_iso):
+    tg("Uploading to YouTube...","📤")
+    token = get_access_token()
+    body = {
+        "snippet":{
+            "title":meta["title"][:100],
+            "description":meta["description"][:5000],
+            "tags":meta["tags"][:500],
+            "categoryId":"27",
+            "defaultLanguage":"en",
+            "defaultAudioLanguage":"en"
+        },
+        "status":{
+            "privacyStatus":"private",
+            "publishAt":publish_iso,
+            "selfDeclaredMadeForKids":False
+        }
+    }
+    r=requests.post(
+        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+        headers={"Authorization":f"Bearer {token}","Content-Type":"application/json",
+                 "X-Upload-Content-Type":"video/mp4"},
+        json=body,timeout=30)
+    upload_url = r.headers.get("Location","")
+    if not upload_url: raise Exception(f"No upload URL: {r.text[:100]}")
+
+    with open(video_path,"rb") as f: video_data = f.read()
+    r2=requests.put(upload_url,headers={"Content-Type":"video/mp4"},data=video_data,timeout=1800)
+    if r2.status_code not in [200,201]: raise Exception(f"Upload failed: {r2.text[:100]}")
+    vid_id = r2.json().get("id","")
+    tg(f"Uploaded! youtube.com/watch?v={vid_id}\nScheduled: {publish_iso}","🎉")
+    return vid_id
+
+def upload_thumbnail(vid_id, thumb_path):
+    try:
+        token = get_access_token()
+        with open(thumb_path,"rb") as f: data = f.read()
+        r=requests.post(f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={vid_id}",
+            headers={"Authorization":f"Bearer {token}","Content-Type":"image/jpeg"},
+            data=data,timeout=60)
+        if r.status_code==200: tg("Thumbnail uploaded!","🖼")
+    except Exception as e: tg(f"Thumbnail upload failed: {e}","⚠")
+
+# ─── MAIN ─────────────────────────────────────────────────────────────────────
+def main():
+    if len(sys.argv) < 2:
+        tg("No command received","⚠"); sys.exit(1)
+
+    cmd = " ".join(sys.argv[1:])
+    tg(f"Command: <b>{cmd}</b>","🚀")
+
+    try:
+        params = parse_command(cmd)
+    except Exception as e:
+        tg(f"Command error: {e}","❌"); sys.exit(1)
+
+    topic    = params["topic"]
+    duration = params["duration"]
+    img_count= params["img_count"]
+    pub_iso  = params["publish_iso"]
+
+    tg(f"<b>{topic}</b> | {duration} min | {img_count} images\n📅 {pub_iso}","📋")
+
+    try:
+        # 1. Content + SEO + Script
+        meta = generate_content(topic, duration, img_count)
+
+        # 2. Music
+        music = generate_music(topic, duration*60)
+
+        # 3. Images
+        images = generate_images(meta["image_prompts"], topic)
+
+        # 4. Thumbnail
+        generate_thumbnail(meta["thumbnail_prompt"], meta["thumbnail_text"], meta["color"], topic)
+
+        # 5. Audio + Subtitles
+        audio, audio_dur, subtitle_srt = generate_audio(meta["script"])
+
+        # 6. Mix music
+        final_audio = mix_audio(audio, music, audio_dur)
+
+        # 7. Assemble video
+        video = assemble_video(images, final_audio, subtitle_srt, audio_dur)
+
+        # 8. Upload
+        vid_id = upload_youtube(video, meta, pub_iso)
+        upload_thumbnail(vid_id, str(WORK/"thumbnail.jpg"))
+
+        tg(f"✅ DONE!\nyoutube.com/watch?v={vid_id}","🎬")
+
+    except Exception as e:
+        tg(f"Fatal error: {str(e)[:200]}","❌")
+        sys.exit(1)
+
+if __name__ == "__main__":
+    main()
