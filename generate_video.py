@@ -291,40 +291,34 @@ def ses_uret(senaryo):
 
 def ses_miksle(anlati,muzik,sure):
     if not muzik or not os.path.exists(muzik):
-        tg("Muzik dosyasi yok, sadece anlatici","⚠")
-        return anlati
+        tg("Muzik yok","⚠"); return anlati
     try:
-        pb=subprocess.run(["ffprobe","-v","quiet","-print_format","json","-show_format",muzik],capture_output=True,text=True)
-        muzik_sure=float(json.loads(pb.stdout)["format"]["duration"])
-        if muzik_sure<3:
-            tg("Muzik cok kisa","⚠"); return anlati
-        tg(f"Muzik bulundu ({muzik_sure:.0f}sn), karistiriliyor...","🎚")
+        pb=subprocess.run(["ffprobe","-v","quiet","-print_format","json",
+            "-show_format",muzik],capture_output=True,text=True)
+        ms=float(json.loads(pb.stdout)["format"]["duration"])
+        if ms<3: tg("Muzik cok kisa","⚠"); return anlati
+        tg(f"Muzik {ms:.0f}sn, karistiriliyor...","🎚")
     except Exception as e:
-        tg(f"Muzik kontrol hatasi: {str(e)[:40]}","⚠"); return anlati
-    
+        tg(f"Muzik probe hatasi: {e}","⚠"); return anlati
+
     miksl=WORK/"miksl.mp3"
-    # Muzigi once WAV'a cevir - format uyumsuzlugunu onler
-    muzik_wav=WORK/"muzik_cevir.wav"
-    subprocess.run(["ffmpeg","-y","-i",muzik,"-ar","44100","-ac","1",str(muzik_wav)],capture_output=True)
-    anlati_wav=WORK/"anlati_cevir.wav"  
-    subprocess.run(["ffmpeg","-y","-i",anlati,"-ar","44100","-ac","1",str(anlati_wav)],capture_output=True)
-    
-    muzik_src=str(muzik_wav) if muzik_wav.exists() else muzik
-    anlati_src=str(anlati_wav) if anlati_wav.exists() else anlati
-    
+    # En basit ve garantili yontem
     cmd=["ffmpeg","-y",
-         "-i",anlati_src,
-         "-stream_loop","-1","-i",muzik_src,
+         "-i",anlati,
+         "-stream_loop","-1","-i",muzik,
          "-filter_complex",
-         f"[0:a]volume=1.0[a1];[1:a]volume=0.35[a2];[a1][a2]amix=inputs=2:duration=first[out]",
-         "-map","[out]",
-         "-c:a","mp3","-b:a","192k","-t",str(int(sure)),
+         "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
+         "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.4[a2];"
+         "[a1][a2]amix=inputs=2:duration=first[aout]",
+         "-map","[aout]",
+         "-c:a","libmp3lame","-b:a","192k",
+         "-t",str(int(sure)+2),
          str(miksl)]
     r=subprocess.run(cmd,capture_output=True,text=True,timeout=600)
-    if r.returncode==0 and miksl.exists() and miksl.stat().st_size>10000:
-        tg("Muzik basariyla eklendi!","✅")
+    if r.returncode==0 and miksl.exists() and miksl.stat().st_size>50000:
+        tg(f"Muzik eklendi! ({miksl.stat().st_size//1024}KB)","✅")
         return str(miksl)
-    tg(f"Miks hatasi: {r.stderr[-100:]}","⚠")
+    tg(f"Miks hatasi: {r.stderr[-150:]}","⚠")
     return anlati
 
 def video_montaj(gorseller,ses,altyazi_srt,toplam_sure):
@@ -335,23 +329,17 @@ def video_montaj(gorseller,ses,altyazi_srt,toplam_sure):
     segmentler=[]
     for i,gorsel in enumerate(gorseller):
         seg=WORK/f"seg_{i:03d}.mp4"; fo=max(0,her-0.6); fr=max(int(her*fps),25); ef=i%6
-        ef=i%8
-        if ef==0:   # Zoom in
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0008,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
+        ef=i%5
+        if ef==0:   # Zoom in merkez
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0008,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
         elif ef==1: # Zoom out
-            vf=f"scale=iw*2:ih*2,zoompan=z='if(lte(on,1),1.15,max(zoom-0.001,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
-        elif ef==2: # Sol sag pan
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)+on*0.8':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
-        elif ef==3: # Sag sol pan
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)-on*0.8':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
-        elif ef==4: # Asagi yukari
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0006,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)+on*0.6':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
-        elif ef==5: # Yukari asagi + vignette
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0006,1.08)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)-on*0.6':d={fr}:s=1920x1080:fps={fps},vignette=angle=PI/5,fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
-        elif ef==6: # Ken Burns diagonal
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0007,1.1)':x='iw/2-(iw/zoom/2)+on*0.4':y='ih/2-(ih/zoom/2)+on*0.3':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
-        else:       # Zoom in + brightness pulse
-            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0008,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},eq=brightness='0.03*sin(2*PI*t/8)':contrast=1.05,fade=t=in:st=0:d=0.6,fade=t=out:st={fo:.2f}:d=0.6"
+            vf=f"scale=iw*2:ih*2,zoompan=z='if(lte(on,1),1.12,max(zoom-0.0008,1.0))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
+        elif ef==2: # Sol sag kayma
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)+on*0.6':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
+        elif ef==3: # Sag sol kayma
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0005,1.06)':x='iw/2-(iw/zoom/2)-on*0.6':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
+        else:       # Zoom in + vignette
+            vf=f"scale=iw*2:ih*2,zoompan=z='min(zoom+0.0007,1.1)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={fr}:s=1920x1080:fps={fps},vignette=angle=PI/5,fade=t=in:st=0:d=0.5,fade=t=out:st={fo:.2f}:d=0.5"
         cmd1=["ffmpeg","-y","-loop","1","-t",str(her+1),"-i",gorsel,"-vf",vf,"-t",str(her),"-c:v","libx264","-preset","ultrafast","-crf","28","-an","-pix_fmt","yuv420p",str(seg)]
         r=subprocess.run(cmd1,capture_output=True,text=True,timeout=300)
         if r.returncode==0 and seg.exists() and seg.stat().st_size>500: segmentler.append(str(seg)); tg(f"Seg {i+1}/{len(gorseller)} ef{ef+1} ok","🎬")
