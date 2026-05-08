@@ -324,19 +324,22 @@ def download_image(i, prompt, total, topic=""):
     clean = prompt[:120].replace('"','').replace("'",'')
     full_prompt = f"{clean}, no people, no humans, no cars, cinematic landscape 8k dramatic lighting"
 
-    for seed in [i*7+42, i*13+17, i*3+99]:
+    for attempt, seed in enumerate([i*7+42, i*13+17, i*3+99, i*19+5, i*31+11]):
         enc = quote(full_prompt[:200])
         url = f"https://image.pollinations.ai/prompt/{enc}?width=1920&height=1080&seed={seed}&nologo=true&model=flux"
         try:
-            r = requests.get(url,timeout=90)
+            r = requests.get(url,timeout=120)
             if r.status_code==200 and len(r.content)>10000 and r.content[:2]==b'\xff\xd8':
                 path.write_bytes(r.content)
                 tg(f"Image {i+1}/{total} ✓","🖼")
-                time.sleep(6)
+                time.sleep(4)
                 return str(path)
-            if r.status_code==429: time.sleep(30)
-            else: time.sleep(8)
-        except: time.sleep(8)
+            if r.status_code==429: time.sleep(45)
+            else: time.sleep(10)
+        except: time.sleep(10)
+        # After 2 failed attempts, simplify prompt
+        if attempt == 1:
+            full_prompt = f"{topic} landscape cinematic dramatic no people 8k"
 
     colors=["0x3D1C02","0x4A0E0E","0x0A1628","0x2D1B69","0x003333","0x1A3A1A","0x330033","0x1A1A00"]
     subprocess.run(["ffmpeg","-y","-f","lavfi","-i",f"color=c={colors[i%len(colors)]}:size=1920x1080:rate=1","-vframes","1","-q:v","2",str(path)],capture_output=True)
@@ -491,7 +494,7 @@ def assemble_video(images, audio, subtitle_srt, total_duration):
         srt_escaped = str(subtitle_srt).replace('\\','/').replace(':','\\:')
         vf_sub = (f"subtitles={srt_escaped}:force_style='"
                   f"FontSize=14,PrimaryColour=&H00FFFF00,"
-                  f"OutlineColour=&H00000000,Outline=2,"
+                  f"OutlineColour=&H00000000,Outline=2,BorderStyle=1,"
                   f"Alignment=2,MarginV=30'")
         r=subprocess.run(["ffmpeg","-y","-i",str(raw_video),"-i",audio,
             "-vf",vf_sub,"-c:v","libx264","-preset","fast","-crf","23",
