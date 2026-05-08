@@ -168,13 +168,56 @@ def muzik_uret(konu,sure_sn):
     wav=WORK/"muzik.wav"; mp3=WORK/"muzik.mp3"
     k=konu.lower()
     for c,r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]: k=k.replace(c,r)
-    if any(x in k for x in ["viking","savas","osmanli","roma","selcuklu","tarih","cin","mogol"]): freqs=[55,82,110,165,220]; label="epic"
-    elif any(x in k for x in ["misir","antik","yunan","sumer","babil","mezopotamya"]): freqs=[174,261,348,130,87]; label="ancient"
-    elif any(x in k for x in ["uzay","yapay","teknoloji","bilim","robot"]): freqs=[220,330,440,550,110]; label="space"
-    elif any(x in k for x in ["doga","hayvan","deniz","orman"]): freqs=[196,261,329,392,130]; label="nature"
-    elif any(x in k for x in ["gizem","korku","paranormal","komplo"]): freqs=[73,110,155,207,87]; label="mystery"
-    else: freqs=[130,164,196,261,87]; label="cinematic"
-    sr=44100; dur=int(min(sure_sn+30,7200)); n=sr*dur; fade=sr*5; amps=[0.22,0.16,0.11,0.07,0.04]
+    import random,hashlib
+    # Konu bazli tohum - ayni konu hep farkli muzik
+    seed_val = int(hashlib.md5(konu.encode()).hexdigest()[:8],16) % 1000
+
+    # Muzik kategorileri - her kategoride 3 farkli varyasyon
+    if any(x in k for x in ["viking","savas","osmanli","roma","selcuklu","tarih","cin","mogol","seldz"]):
+        varyasyonlar = [
+            ([55,110,165,220,82], [0.30,0.20,0.15,0.08,0.12], "epic_1"),   # Derin davul
+            ([41,82,123,165,55], [0.28,0.22,0.16,0.09,0.10], "epic_2"),    # Cok derin
+            ([55,110,220,330,82], [0.25,0.20,0.18,0.08,0.14], "epic_3"),   # Orta epik
+        ]
+    elif any(x in k for x in ["misir","antik","yunan","sumer","babil","mezopotamya","fenike"]):
+        varyasyonlar = [
+            ([174,261,348,130,87], [0.25,0.20,0.15,0.10,0.08], "ancient_1"),
+            ([196,294,392,147,98], [0.22,0.18,0.14,0.12,0.09], "ancient_2"),
+            ([164,246,328,123,82], [0.28,0.19,0.13,0.10,0.07], "ancient_3"),
+        ]
+    elif any(x in k for x in ["uzay","yapay","teknoloji","bilim","robot","gelecek"]):
+        varyasyonlar = [
+            ([220,330,440,550,110], [0.20,0.16,0.12,0.08,0.10], "space_1"),
+            ([196,294,392,490,98],  [0.22,0.17,0.13,0.07,0.09], "space_2"),
+            ([233,349,466,582,116], [0.18,0.15,0.14,0.09,0.11], "space_3"),
+        ]
+    elif any(x in k for x in ["doga","hayvan","deniz","orman","okyanus"]):
+        varyasyonlar = [
+            ([196,261,329,392,130], [0.20,0.16,0.14,0.10,0.08], "nature_1"),
+            ([174,232,293,349,116], [0.22,0.17,0.13,0.09,0.07], "nature_2"),
+            ([207,276,347,415,138], [0.18,0.15,0.14,0.11,0.09], "nature_3"),
+        ]
+    elif any(x in k for x in ["gizem","korku","paranormal","komplo","karanlik"]):
+        varyasyonlar = [
+            ([73,110,155,207,87],  [0.25,0.18,0.13,0.09,0.10], "mystery_1"),
+            ([65,98,138,184,77],   [0.27,0.19,0.12,0.08,0.11], "mystery_2"),
+            ([82,123,174,232,98],  [0.23,0.17,0.14,0.10,0.09], "mystery_3"),
+        ]
+    else:
+        varyasyonlar = [
+            ([130,164,196,261,87], [0.22,0.18,0.14,0.09,0.08], "cinematic_1"),
+            ([138,174,207,277,92], [0.20,0.17,0.15,0.10,0.09], "cinematic_2"),
+            ([123,155,185,247,82], [0.24,0.16,0.13,0.08,0.10], "cinematic_3"),
+        ]
+
+    freqs,amps,label = varyasyonlar[seed_val % len(varyasyonlar)]
+
+    sr=44100; dur=int(min(sure_sn+30,7200)); n=sr*dur; fade=sr*4
+
+    # Ritim icin vurus pattern (her 0.5 saniyede hafif vurus)
+    bpm = 90 if "epic" in label else 75 if "ancient" in label else 95 if "space" in label else 70
+    vurus_periyot = sr * 60 // bpm
+
     try:
         with open(wav,'wb') as f:
             dsize=n*2
@@ -187,19 +230,31 @@ def muzik_uret(konu,sure_sn):
             for start in range(0,n,sr):
                 end=min(start+sr,n); buf=[]
                 for i in range(start,end):
-                    t=i/sr; v=sum(a*math.sin(2*math.pi*fr*t) for a,fr in zip(amps,freqs))
-                    v*=(1+0.015*math.sin(2*math.pi*0.25*t))
+                    t=i/sr
+                    # Ana melodi
+                    v=sum(a*math.sin(2*math.pi*fr*t) for a,fr in zip(amps,freqs))
+                    # Ritim vurusu
+                    pos_in_beat = i % vurus_periyot
+                    if pos_in_beat < sr//20:  # Vurusun ilk 50ms'i
+                        vurus_env = 1.0 - (pos_in_beat / (sr//20))
+                        v += 0.15 * vurus_env * math.sin(2*math.pi*80*t)
+                    # Hafif saliniм
+                    v *= (1+0.02*math.sin(2*math.pi*0.2*t))
+                    # Fade
                     if i<fade: v*=i/fade
                     elif i>n-fade: v*=(n-i)/fade
-                    buf.append(struct.pack('<h',int(max(-0.85,min(0.85,v))*32767)))
+                    buf.append(struct.pack('<h',int(max(-0.88,min(0.88,v))*32767)))
                 f.write(b''.join(buf))
+
         r=subprocess.run(["ffmpeg","-y","-i",str(wav),
-            "-af","volume=1.8,aecho=0.5:0.6:60:0.2",
-            "-c:a","mp3","-b:a","128k",str(mp3)],capture_output=True,text=True,timeout=180)
+            "-af","volume=2.0",
+            "-c:a","mp3","-b:a","128k",str(mp3)],
+            capture_output=True,text=True,timeout=180)
         if r.returncode==0 and mp3.exists() and mp3.stat().st_size>1000:
             kb=mp3.stat().st_size//1024
-            tg(f"Muzik hazir! ({label}, {kb}KB)","✅"); return str(mp3)
-    except Exception as e: tg(f"Muzik WAV hatasi: {str(e)[:60]}","⚠")
+            tg(f"Muzik hazir! ({label}, {bpm}bpm, {kb}KB)","✅")
+            return str(mp3)
+    except Exception as e: tg(f"Muzik hatasi: {str(e)[:60]}","⚠")
     return ""
 
 def gorsel_indir(i,prompt,toplam,konu=""):
@@ -309,7 +364,7 @@ def ses_miksle(anlati,muzik,sure):
          "-filter_complex",
          "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
          "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.4[a2];"
-         "[a1][a2]amix=inputs=2:duration=first[aout]",
+         "[a1][a2]amix=inputs=2:duration=first:weights=1 0.6[aout]",
          "-map","[aout]",
          "-c:a","libmp3lame","-b:a","192k",
          "-t",str(int(sure)+2),
