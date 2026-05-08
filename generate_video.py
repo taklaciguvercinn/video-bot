@@ -477,10 +477,10 @@ def assemble_video(images, audio, subtitle_srt, total_duration):
 
     # Concat
     concat_list = WORK/"concat.txt"
-    concat_list.write_text('\n'.join(f"file '{c}'" for c in clips))
+    concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in clips))
     raw_video = WORK/"video_raw.mp4"
     r=subprocess.run(["ffmpeg","-y","-f","concat","-safe","0",
-        "-i",str(concat_list),"-c:v","copy",str(raw_video)],
+        "-i",str(concat_list.resolve()),"-c:v","copy",str(raw_video)],
         capture_output=True,text=True,timeout=3600)
     if r.returncode!=0 or not raw_video.exists():
         raise Exception(f"Concat failed: {r.stderr[-100:]}")
