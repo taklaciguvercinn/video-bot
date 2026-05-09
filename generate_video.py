@@ -437,17 +437,21 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
     fade_sure = 0.8
 
     def efekt_sec(idx, frames):
-        efektler = [
-            f"zoompan=z='1.0+(0.12*on/{frames})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
-            f"zoompan=z='1.12-(0.12*on/{frames})':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
-            f"zoompan=z='1.10':x='(iw*0.05)-(iw*0.05*on/{frames})':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
-            f"zoompan=z='1.10':x='iw*0.05*on/{frames}':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
-            f"zoompan=z='1.10':x='iw/2-(iw/zoom/2)':y='(ih*0.04)-(ih*0.04*on/{frames})':d={frames}:s=1920x1080:fps={fps}",
-            f"zoompan=z='1.10':x='iw/2-(iw/zoom/2)':y='ih*0.04*on/{frames}':d={frames}:s=1920x1080:fps={fps}",
-            f"zoompan=z='1.0':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
-            f"zoompan=z='1.0+(0.10*on/{frames})':x='(iw*0.03)-(iw*0.03*on/{frames})':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
-        ]
-        return efektler[idx % len(efektler)]
+        # Sadece zoom in / zoom out, yavaş ve smooth, titreme yok
+        if idx % 2 == 0:
+            # Zoom in: 1.0'dan 1.08'e çok yavaş
+            return (f"scale=8000:-1,zoompan="
+                    f"z='1.0+(0.08*on/{frames})':"
+                    f"x='iw/2-(iw/zoom/2)':"
+                    f"y='ih/2-(ih/zoom/2)':"
+                    f"d={frames}:s=1920x1080:fps={fps}")
+        else:
+            # Zoom out: 1.08'den 1.0'a çok yavaş
+            return (f"scale=8000:-1,zoompan="
+                    f"z='1.08-(0.08*on/{frames})':"
+                    f"x='iw/2-(iw/zoom/2)':"
+                    f"y='ih/2-(ih/zoom/2)':"
+                    f"d={frames}:s=1920x1080:fps={fps}")
 
     klipler = []
     for idx, gorsel in enumerate(gorseller):
