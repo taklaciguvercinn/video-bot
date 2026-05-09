@@ -193,67 +193,106 @@ Begin the {topic} documentary narration now:"""
 
 # ─── MUSIC ───────────────────────────────────────────────────────────────────
 def generate_music(topic, duration_sec):
-    tg("Generating music...","🎵")
-    wav = WORK/"music.wav"; mp3 = WORK/"music.mp3"
+    tg("Downloading royalty-free music...","🎵")
+    mp3 = WORK/"music.mp3"
     k = topic.lower()
     seed_val = int(hashlib.md5(topic.encode()).hexdigest()[:8],16) % 1000
 
-    if any(x in k for x in ["war","battle","viking","roman","ottoman","medieval","samurai","mongol","crusade"]):
+    if any(x in k for x in ["war","battle","viking","roman","ottoman","medieval","samurai","mongol","crusade","napoleon","soldier"]):
+        cat = "epic"
+    elif any(x in k for x in ["egypt","ancient","greek","sumerian","babylon","mesopotamia","pharaoh","rome","persia"]):
+        cat = "ancient"
+    elif any(x in k for x in ["space","technology","ai","future","science","robot","digital","quantum"]):
+        cat = "space"
+    elif any(x in k for x in ["nature","ocean","forest","animal","wildlife","earth","jungle","mountain"]):
+        cat = "nature"
+    elif any(x in k for x in ["mystery","secret","conspiracy","paranormal","dark","unknown","hidden"]):
+        cat = "mystery"
+    else:
+        cat = "cinematic"
+
+    music_urls = {
+        "epic": [
+            "https://freepd.com/music/Hitman%20Victim.mp3",
+            "https://freepd.com/music/Dark%20Mystery.mp3",
+            "https://freepd.com/music/Floating%20Cities.mp3",
+        ],
+        "ancient": [
+            "https://freepd.com/music/Ancient%20Dream.mp3",
+            "https://freepd.com/music/Mysterious%20Ambiance.mp3",
+            "https://freepd.com/music/Dark%20Mystery.mp3",
+        ],
+        "space": [
+            "https://freepd.com/music/Space%20Fighter.mp3",
+            "https://freepd.com/music/Ambient%20Ambulance.mp3",
+            "https://freepd.com/music/Floating%20Cities.mp3",
+        ],
+        "nature": [
+            "https://freepd.com/music/Acoustic%20Meditation.mp3",
+            "https://freepd.com/music/Carefree.mp3",
+            "https://freepd.com/music/Inspired.mp3",
+        ],
+        "mystery": [
+            "https://freepd.com/music/Dark%20Mystery.mp3",
+            "https://freepd.com/music/Mysterious%20Ambiance.mp3",
+            "https://freepd.com/music/Hitman%20Victim.mp3",
+        ],
+        "cinematic": [
+            "https://freepd.com/music/Inspired.mp3",
+            "https://freepd.com/music/Floating%20Cities.mp3",
+            "https://freepd.com/music/Mischief%20Makers.mp3",
+        ],
+    }
+
+    urls = music_urls.get(cat, music_urls["cinematic"])
+    url  = urls[seed_val % len(urls)]
+    tg(f"Music category: {cat}","🎼")
+
+    for attempt in range(3):
+        try:
+            r = requests.get(url, timeout=60, headers={"User-Agent":"Mozilla/5.0"})
+            if r.status_code == 200 and len(r.content) > 50000:
+                mp3.write_bytes(r.content)
+                kb = len(r.content) // 1024
+                tg(f"Music downloaded! ({cat}, {kb}KB)","✅")
+                return str(mp3)
+            url = urls[(seed_val + attempt + 1) % len(urls)]
+            time.sleep(5)
+        except Exception as e:
+            tg(f"Music attempt {attempt+1} failed: {str(e)[:40]}","⚠")
+            url = urls[(seed_val + attempt + 1) % len(urls)]
+            time.sleep(5)
+
+    tg("All URLs failed, using synthesized music...","⚠")
+    return _synth_music_fallback(topic, duration_sec)
+
+
+def _synth_music_fallback(topic, duration_sec):
+    wav = WORK/"music.wav"
+    mp3 = WORK/"music.mp3"
+    k = topic.lower()
+    seed_val = int(hashlib.md5(topic.encode()).hexdigest()[:8],16) % 1000
+
+    if any(x in k for x in ["war","battle","viking","roman","ottoman","medieval","napoleon"]):
         kategoriler = [
             {"base":[55,110,165,220,82],"amps":[0.28,0.18,0.12,0.07,0.20],"chords":[1.0,1.12,0.94,1.06],"dur":6,"label":"epic_1"},
             {"base":[41,82,123,165,55], "amps":[0.26,0.20,0.13,0.06,0.22],"chords":[1.0,1.19,0.89,1.12],"dur":5,"label":"epic_2"},
-            {"base":[55,110,220,165,82],"amps":[0.24,0.18,0.15,0.08,0.20],"chords":[1.0,1.06,1.12,0.94],"dur":7,"label":"epic_3"},
-        ]
-        bpm = 80
-    elif any(x in k for x in ["egypt","ancient","greek","sumerian","babylon","mesopotamia","pharaoh"]):
+        ]; bpm = 80
+    elif any(x in k for x in ["mystery","secret","dark","paranormal"]):
         kategoriler = [
-            {"base":[174,261,348,130,87],"amps":[0.22,0.17,0.12,0.10,0.18],"chords":[1.0,1.12,1.26,1.06],"dur":8,"label":"ancient_1"},
-            {"base":[196,294,392,147,98],"amps":[0.20,0.16,0.13,0.11,0.17],"chords":[1.0,1.19,0.94,1.12],"dur":7,"label":"ancient_2"},
-            {"base":[164,246,328,123,82],"amps":[0.24,0.17,0.11,0.09,0.19],"chords":[1.0,1.06,1.19,0.89],"dur":6,"label":"ancient_3"},
-        ]
-        bpm = 65
-    elif any(x in k for x in ["space","technology","ai","future","science","robot","digital"]):
-        kategoriler = [
-            {"base":[220,330,440,550,110],"amps":[0.18,0.14,0.10,0.06,0.16],"chords":[1.0,1.12,1.33,1.06],"dur":9,"label":"space_1"},
-            {"base":[196,294,392,490,98], "amps":[0.20,0.15,0.11,0.05,0.15],"chords":[1.0,1.19,1.06,1.26],"dur":8,"label":"space_2"},
-            {"base":[233,349,466,582,116],"amps":[0.16,0.13,0.12,0.07,0.17],"chords":[1.0,1.06,1.33,0.94],"dur":10,"label":"space_3"},
-        ]
-        bpm = 90
-    elif any(x in k for x in ["nature","ocean","forest","animal","wildlife","earth"]):
-        kategoriler = [
-            {"base":[196,261,329,392,130],"amps":[0.18,0.14,0.12,0.08,0.16],"chords":[1.0,1.12,1.25,1.06],"dur":8,"label":"nature_1"},
-            {"base":[174,232,293,349,116],"amps":[0.20,0.15,0.11,0.07,0.15],"chords":[1.0,1.19,1.06,1.12],"dur":7,"label":"nature_2"},
-            {"base":[207,276,347,415,138],"amps":[0.16,0.13,0.13,0.09,0.17],"chords":[1.0,1.06,1.19,0.94],"dur":9,"label":"nature_3"},
-        ]
-        bpm = 60
-    elif any(x in k for x in ["mystery","secret","conspiracy","paranormal","dark","unknown"]):
-        kategoriler = [
-            {"base":[73,110,155,207,87], "amps":[0.22,0.16,0.11,0.07,0.20],"chords":[1.0,1.06,0.89,1.12],"dur":7,"label":"mystery_1"},
-            {"base":[65,98,138,184,77],  "amps":[0.24,0.17,0.10,0.06,0.21],"chords":[1.0,0.94,1.06,1.19],"dur":6,"label":"mystery_2"},
-            {"base":[82,123,174,232,98], "amps":[0.20,0.15,0.12,0.08,0.19],"chords":[1.0,1.12,0.89,1.06],"dur":8,"label":"mystery_3"},
-        ]
-        bpm = 55
+            {"base":[73,110,155,207,87],"amps":[0.22,0.16,0.11,0.07,0.20],"chords":[1.0,1.06,0.89,1.12],"dur":7,"label":"mystery_1"},
+            {"base":[65,98,138,184,77], "amps":[0.24,0.17,0.10,0.06,0.21],"chords":[1.0,0.94,1.06,1.19],"dur":6,"label":"mystery_2"},
+        ]; bpm = 55
     else:
         kategoriler = [
             {"base":[130,164,196,261,87],"amps":[0.20,0.16,0.12,0.07,0.18],"chords":[1.0,1.12,1.25,1.06],"dur":7,"label":"cinematic_1"},
             {"base":[138,174,207,277,92],"amps":[0.18,0.15,0.13,0.08,0.17],"chords":[1.0,1.19,1.06,1.12],"dur":6,"label":"cinematic_2"},
-            {"base":[123,155,185,247,82],"amps":[0.22,0.14,0.11,0.06,0.19],"chords":[1.0,1.06,1.19,0.94],"dur":8,"label":"cinematic_3"},
-        ]
-        bpm = 70
+        ]; bpm = 70
 
-    cfg        = kategoriler[seed_val % len(kategoriler)]
-    base_freqs = cfg["base"]
-    amps       = cfg["amps"]
-    chords     = cfg["chords"]
-    chord_dur  = cfg["dur"]
-    label      = cfg["label"]
-
-    sr           = 44100
-    dur          = int(min(duration_sec + 30, 7200))
-    n            = sr * dur
-    fade         = sr * 3
-    beat_period  = int(sr * 60 / bpm)
-    beat_env_len = int(sr * 0.20)
+    cfg = kategoriler[seed_val % len(kategoriler)]
+    base_freqs,amps,chords,chord_dur,label = cfg["base"],cfg["amps"],cfg["chords"],cfg["dur"],cfg["label"]
+    sr=44100; dur=int(min(duration_sec+30,7200)); n=sr*dur; fade=sr*3
+    beat_period=int(sr*60/bpm); beat_env_len=int(sr*0.20)
 
     def smooth_env(pos, length):
         if pos >= length: return 0.0
@@ -261,61 +300,43 @@ def generate_music(topic, duration_sec):
 
     try:
         with open(wav,'wb') as f:
-            dsize = n * 2
+            dsize=n*2
             f.write(b'RIFF'); f.write(struct.pack('<I',36+dsize))
             f.write(b'WAVEfmt '); f.write(struct.pack('<I',16))
             f.write(struct.pack('<H',1)); f.write(struct.pack('<H',1))
             f.write(struct.pack('<I',sr)); f.write(struct.pack('<I',sr*2))
             f.write(struct.pack('<H',2)); f.write(struct.pack('<H',16))
             f.write(b'data'); f.write(struct.pack('<I',dsize))
-
             for start in range(0,n,sr):
-                end = min(start+sr,n); buf = []
+                end=min(start+sr,n); buf=[]
                 for i in range(start,end):
-                    t = i/sr
-
-                    # Chord progression
-                    chord_idx = int(t/chord_dur) % len(chords)
-                    chord_pos = t % chord_dur
-                    xfade = 0.5
-                    if chord_pos < xfade:
-                        prev_idx   = (chord_idx-1) % len(chords)
-                        blend      = chord_pos / xfade
-                        multiplier = chords[prev_idx]*(1-blend) + chords[chord_idx]*blend
+                    t=i/sr
+                    chord_idx=int(t/chord_dur)%len(chords)
+                    chord_pos=t%chord_dur
+                    if chord_pos<0.5:
+                        prev_idx=(chord_idx-1)%len(chords)
+                        blend=chord_pos/0.5
+                        multiplier=chords[prev_idx]*(1-blend)+chords[chord_idx]*blend
                     else:
-                        multiplier = chords[chord_idx]
-
-                    # Main harmonics
-                    v = sum(a*math.sin(2*math.pi*fr*multiplier*t) for a,fr in zip(amps,base_freqs))
-
-                    # 3rd harmonic - fullness
-                    v += amps[0]*0.08*math.sin(2*math.pi*base_freqs[0]*multiplier*3*t)
-
-                    # Rhythm - smooth envelope, no pops
-                    pos_in_beat = i % beat_period
-                    v += 0.10*smooth_env(pos_in_beat,beat_env_len)*math.sin(2*math.pi*70*multiplier*t)
-
-                    # Subtle tremolo
-                    v *= (1+0.02*math.sin(2*math.pi*0.15*t))
-
-                    # Fade in/out
-                    if i < fade:       v *= i/fade
-                    elif i > n-fade:   v *= (n-i)/fade
-
+                        multiplier=chords[chord_idx]
+                    v=sum(a*math.sin(2*math.pi*fr*multiplier*t) for a,fr in zip(amps,base_freqs))
+                    v+=amps[0]*0.08*math.sin(2*math.pi*base_freqs[0]*multiplier*3*t)
+                    pos_in_beat=i%beat_period
+                    v+=0.10*smooth_env(pos_in_beat,beat_env_len)*math.sin(2*math.pi*70*multiplier*t)
+                    v*=(1+0.02*math.sin(2*math.pi*0.15*t))
+                    if i<fade: v*=i/fade
+                    elif i>n-fade: v*=(n-i)/fade
                     buf.append(struct.pack('<h',int(max(-0.85,min(0.85,v))*32767)))
                 f.write(b''.join(buf))
-
-        r = subprocess.run(
-            ["ffmpeg","-y","-i",str(wav),
-             "-af","volume=2.0,highpass=f=40,lowpass=f=8000",
-             "-c:a","mp3","-b:a","128k",str(mp3)],
+        r=subprocess.run(["ffmpeg","-y","-i",str(wav),
+            "-af","volume=2.0,highpass=f=40,lowpass=f=8000",
+            "-c:a","mp3","-b:a","128k",str(mp3)],
             capture_output=True,text=True,timeout=180)
         if r.returncode==0 and mp3.exists() and mp3.stat().st_size>1000:
-            kb = mp3.stat().st_size//1024
-            tg(f"Music ready! ({label}, {bpm}bpm, {kb}KB)","✅")
+            tg(f"Synth music ready ({label})","✅")
             return str(mp3)
     except Exception as e:
-        tg(f"Music error: {str(e)[:60]}","⚠")
+        tg(f"Synth error: {str(e)[:60]}","⚠")
     return ""
 
 # ─── IMAGES ──────────────────────────────────────────────────────────────────
