@@ -204,14 +204,15 @@ def find_music(music_hint):
     if not all_mp3:
         return None
 
-    hint = music_hint.lower().strip()
+    # Özel karakterleri temizleyerek karşılaştır
+    def clean(s):
+        return re.sub(r"[^a-z0-9]", "", s.lower())
 
-    # Tam veya kısmi eşleşme ara
+    hint_clean = clean(music_hint)
+
     for mp3 in all_mp3:
-        if hint in mp3.name.lower():
+        if hint_clean in clean(mp3.name):
             return mp3
-
-    # Hiç bulunamazsa None döndür
     return None
 
 def generate_music(topic, duration_sec, music_hint=""):
@@ -226,10 +227,14 @@ def generate_music(topic, duration_sec, music_hint=""):
     chosen = None
 
     # 1. Önce music_hint ile ara
-    if music_hint:
-        hint = music_hint.lower().strip()
+    def clean(s):
+        return re.sub(r"[^a-z0-9]", "", s.lower())
+
+    hint_clean = clean(music_hint)
+
+    if hint_clean:
         for mp3 in all_mp3:
-            if hint in mp3.name.lower():
+            if hint_clean in clean(mp3.name):
                 chosen = mp3
                 break
         if not chosen:
@@ -406,14 +411,19 @@ def generate_audio(script):
 
 # ─── MUSIC MIX ───────────────────────────────────────────────────────────────
 def mix_audio(narration, music, duration):
-    if not music or not os.path.exists(music):
-        tg("No music file","⚠"); return narration
+    if not music:
+        tg("No music path","⚠"); return narration
+    music_path = Path(music)
+    if not music_path.exists():
+        tg(f"Music file not found: {music}","⚠"); return narration
+    tg(f"Music file size: {music_path.stat().st_size//1024}KB","🎚")
     try:
-        pb=subprocess.run(["ffprobe","-v","quiet","-print_format","json","-show_format",music],capture_output=True,text=True)
+        pb=subprocess.run(["ffprobe","-v","quiet","-print_format","json","-show_format",str(music_path)],capture_output=True,text=True)
         ms=float(json.loads(pb.stdout)["format"]["duration"])
-        if ms<3: return narration
+        if ms<3: tg("Music too short","⚠"); return narration
         tg(f"Mixing audio + music ({ms:.0f}s)...","🎚")
-    except: return narration
+    except Exception as e:
+        tg(f"ffprobe error: {e}","⚠"); return narration
 
     mixed=WORK/"mixed.mp3"
     cmd=["ffmpeg","-y",
