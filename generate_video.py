@@ -193,11 +193,13 @@ Begin the {topic} documentary narration now:"""
 
 # ─── MUSIC ───────────────────────────────────────────────────────────────────
 def generate_music(topic, duration_sec):
-    tg("Downloading royalty-free music...","🎵")
-    mp3 = WORK/"music.mp3"
+    tg("Loading music from repo...","🎵")
     k = topic.lower()
-    seed_val = int(hashlib.md5(topic.encode()).hexdigest()[:8],16) % 1000
 
+    # Repo kökündeki MP3 dosyaları - GitHub Actions'da GITHUB_WORKSPACE altında
+    repo_root = Path(os.environ.get("GITHUB_WORKSPACE", "."))
+
+    # Kategori tespiti
     if any(x in k for x in ["war","battle","viking","roman","ottoman","medieval","samurai","mongol","crusade","napoleon","soldier"]):
         cat = "epic"
     elif any(x in k for x in ["egypt","ancient","greek","sumerian","babylon","mesopotamia","pharaoh","rome","persia"]):
@@ -211,60 +213,39 @@ def generate_music(topic, duration_sec):
     else:
         cat = "cinematic"
 
-    music_urls = {
-        "epic": [
-            "https://freepd.com/music/Hitman%20Victim.mp3",
-            "https://freepd.com/music/Dark%20Mystery.mp3",
-            "https://freepd.com/music/Floating%20Cities.mp3",
-        ],
-        "ancient": [
-            "https://freepd.com/music/Ancient%20Dream.mp3",
-            "https://freepd.com/music/Mysterious%20Ambiance.mp3",
-            "https://freepd.com/music/Dark%20Mystery.mp3",
-        ],
-        "space": [
-            "https://freepd.com/music/Space%20Fighter.mp3",
-            "https://freepd.com/music/Ambient%20Ambulance.mp3",
-            "https://freepd.com/music/Floating%20Cities.mp3",
-        ],
-        "nature": [
-            "https://freepd.com/music/Acoustic%20Meditation.mp3",
-            "https://freepd.com/music/Carefree.mp3",
-            "https://freepd.com/music/Inspired.mp3",
-        ],
-        "mystery": [
-            "https://freepd.com/music/Dark%20Mystery.mp3",
-            "https://freepd.com/music/Mysterious%20Ambiance.mp3",
-            "https://freepd.com/music/Hitman%20Victim.mp3",
-        ],
-        "cinematic": [
-            "https://freepd.com/music/Inspired.mp3",
-            "https://freepd.com/music/Floating%20Cities.mp3",
-            "https://freepd.com/music/Mischief%20Makers.mp3",
-        ],
+    # Kategori -> dosya eşleştirmesi (tam isimler repodaki gibi)
+    music_files = {
+        "epic":      "nastelbom-epic-501714.mp3",
+        "ancient":   "onetent-ancient-181070.mp3",
+        "space":     "the_mountain-space-438391.mp3",
+        "nature":    "sonican-background-music-new-age-",   # prefix, glob ile bulunacak
+        "mystery":   "studiokolomna-risk-136788.mp3",
+        "cinematic": "atlasaudio-ambient-soundscapes-511",  # prefix, glob ile bulunacak
     }
 
-    urls = music_urls.get(cat, music_urls["cinematic"])
-    url  = urls[seed_val % len(urls)]
     tg(f"Music category: {cat}","🎼")
 
-    for attempt in range(3):
-        try:
-            r = requests.get(url, timeout=60, headers={"User-Agent":"Mozilla/5.0"})
-            if r.status_code == 200 and len(r.content) > 50000:
-                mp3.write_bytes(r.content)
-                kb = len(r.content) // 1024
-                tg(f"Music downloaded! ({cat}, {kb}KB)","✅")
-                return str(mp3)
-            url = urls[(seed_val + attempt + 1) % len(urls)]
-            time.sleep(5)
-        except Exception as e:
-            tg(f"Music attempt {attempt+1} failed: {str(e)[:40]}","⚠")
-            url = urls[(seed_val + attempt + 1) % len(urls)]
-            time.sleep(5)
+    filename = music_files.get(cat, music_files["cinematic"])
 
-    tg("All URLs failed, using synthesized music...","⚠")
-    return _synth_music_fallback(topic, duration_sec)
+    # Tam isim veya prefix ile dosyayı bul
+    music_path = repo_root / filename
+    if not music_path.exists():
+        # Prefix ile ara
+        matches = list(repo_root.glob(f"{filename}*.mp3"))
+        if matches:
+            music_path = matches[0]
+        else:
+            # Herhangi bir mp3 bul
+            all_mp3 = list(repo_root.glob("*.mp3"))
+            if all_mp3:
+                music_path = all_mp3[0]
+                tg(f"Fallback music: {music_path.name}","⚠")
+            else:
+                tg("No music files found in repo, using synth...","⚠")
+                return _synth_music_fallback(topic, duration_sec)
+
+    tg(f"Music loaded: {music_path.name}","✅")
+    return str(music_path)
 
 
 def _synth_music_fallback(topic, duration_sec):
