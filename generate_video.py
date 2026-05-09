@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Video Bot English v1 - Everything in English"""
+"""Video Bot English v2"""
 
 import sys,os,json,time,requests,subprocess,re,struct,math,hashlib
 from datetime import datetime
@@ -39,17 +39,20 @@ def tg_photo(path, caption):
     except: pass
 
 def parse_command(cmd):
+    # Format: Topic,Music,Minutes,Images,DD.MM.YYYY,HH:MM
     p = [x.strip() for x in cmd.strip().split(",")]
-    if len(p) == 5:
-        topic,dur,imgs,date_s,time_s = p; vid_count = 0
-    elif len(p) == 6:
-        topic,dur,imgs,vid_count,date_s,time_s = p; vid_count = int(vid_count)
-    else:
-        raise ValueError("Format: Topic,Minutes,Images,Videos,DD.MM.YYYY,HH:MM")
+    if len(p) != 6:
+        raise ValueError("Format: Topic,Music,Minutes,Images,DD.MM.YYYY,HH:MM")
+    topic, music_hint, dur, imgs, date_s, time_s = p
     pub = datetime.strptime(f"{date_s} {time_s}","%d.%m.%Y %H:%M")
-    return {"topic":topic,"duration":int(dur),"img_count":int(imgs),
-            "vid_count":vid_count,"publish_dt":pub,
-            "publish_iso":pub.strftime("%Y-%m-%dT%H:%M:%S+00:00")}
+    return {
+        "topic": topic,
+        "music_hint": music_hint.strip().lower(),
+        "duration": int(dur),
+        "img_count": int(imgs),
+        "publish_dt": pub,
+        "publish_iso": pub.strftime("%Y-%m-%dT%H:%M:%S+00:00")
+    }
 
 def gemini(prompt, max_tokens=8192):
     for model,api in GEMINI_MODELS:
@@ -105,9 +108,10 @@ def generate_content(topic, duration, img_count):
         "great wall": ["Great Wall of China ancient stone watchtower mountain mist","Ming dynasty fortress dramatic clouds","ancient Chinese battlefield landscape epic lighting"],
         "ottoman": ["Ottoman Empire palace architecture golden era","Constantinople Byzantine cityscape dramatic","Ottoman army fortress medieval stone"],
         "egypt": ["ancient Egyptian pyramid Giza desert sunrise","Egyptian temple hieroglyphics stone dramatic","Nile river ancient civilization golden light"],
-        "viking": ["Viking longship stormy ocean dramatic","Norse village wooden houses snow landscape","Viking battlefield epic landscape Scandinavia"],
+        "viking": ["Viking longship stormy ocean dramatic","Norse village wooden houses snow landscape","Scandinavian fjord epic landscape"],
         "roman": ["ancient Roman Colosseum architecture epic","Roman legionnaire fortress dramatic lighting","ancient Rome Forum ruins golden hour"],
-        "space": ["deep space nebula galaxy ultra detailed","space station orbit Earth dramatic lighting","astronaut spacewalk cosmos cinematic"],
+        "napoleon": ["Napoleonic battlefield epic landscape","French Empire palace architecture dramatic","19th century European fortress dramatic"],
+        "space": ["deep space nebula galaxy ultra detailed","space station orbit Earth dramatic lighting","cosmos cinematic dramatic"],
         "nature": ["tropical rainforest waterfall dramatic light","mountain glacier landscape epic dramatic","ocean waves cliffs cinematic dramatic"],
         "world war": ["World War battlefield dramatic landscape","military fortress ruins dramatic atmosphere","wartime landscape dramatic moody"],
     }
@@ -192,93 +196,88 @@ Begin the {topic} documentary narration now:"""
     return meta
 
 # ─── MUSIC ───────────────────────────────────────────────────────────────────
-def generate_music(topic, duration_sec):
-    tg("Loading music from repo...","🎵")
-    k = topic.lower()
-
-    # Repo kökündeki MP3 dosyaları - GitHub Actions'da GITHUB_WORKSPACE altında
+def find_music(music_hint):
+    """music_hint ile repodaki MP3'leri eşleştir"""
     repo_root = Path(os.environ.get("GITHUB_WORKSPACE", "."))
+    all_mp3 = list(repo_root.glob("*.mp3"))
 
-    # Kategori tespiti
-    if any(x in k for x in ["war","battle","viking","roman","ottoman","medieval","samurai","mongol","crusade","napoleon","soldier"]):
-        cat = "epic"
-    elif any(x in k for x in ["egypt","ancient","greek","sumerian","babylon","mesopotamia","pharaoh","rome","persia"]):
-        cat = "ancient"
-    elif any(x in k for x in ["space","technology","ai","future","science","robot","digital","quantum"]):
-        cat = "space"
-    elif any(x in k for x in ["nature","ocean","forest","animal","wildlife","earth","jungle","mountain"]):
-        cat = "nature"
-    elif any(x in k for x in ["mystery","secret","conspiracy","paranormal","dark","unknown","hidden"]):
-        cat = "mystery"
-    else:
-        cat = "cinematic"
+    if not all_mp3:
+        return None
 
-    # Kategori -> dosya eşleştirmesi (tam isimler repodaki gibi)
-    music_files = {
-        "epic":      "nastelbom-epic-501714.mp3",
-        "ancient":   "onetent-ancient-181070.mp3",
-        "space":     "the_mountain-space-438391.mp3",
-        "nature":    "sonican-background-music-new-age-",   # prefix, glob ile bulunacak
-        "mystery":   "studiokolomna-risk-136788.mp3",
-        "cinematic": "atlasaudio-ambient-soundscapes-511",  # prefix, glob ile bulunacak
-    }
+    hint = music_hint.lower().strip()
 
-    tg(f"Music category: {cat}","🎼")
+    # Tam veya kısmi eşleşme ara
+    for mp3 in all_mp3:
+        if hint in mp3.name.lower():
+            return mp3
 
-    filename = music_files.get(cat, music_files["cinematic"])
+    # Hiç bulunamazsa None döndür
+    return None
 
-    # Tam isim veya prefix ile dosyayı bul
-    music_path = repo_root / filename
-    if not music_path.exists():
-        # Prefix ile ara
-        matches = list(repo_root.glob(f"{filename}*.mp3"))
-        if matches:
-            music_path = matches[0]
+def generate_music(topic, duration_sec, music_hint=""):
+    tg("Loading music...","🎵")
+    repo_root = Path(os.environ.get("GITHUB_WORKSPACE", "."))
+    all_mp3 = list(repo_root.glob("*.mp3"))
+
+    if not all_mp3:
+        tg("No MP3 files in repo!","⚠")
+        return _synth_music_fallback(topic, duration_sec)
+
+    chosen = None
+
+    # 1. Önce music_hint ile ara
+    if music_hint:
+        hint = music_hint.lower().strip()
+        for mp3 in all_mp3:
+            if hint in mp3.name.lower():
+                chosen = mp3
+                break
+        if not chosen:
+            tg(f"Hint '{music_hint}' not found, using category match...","⚠")
+
+    # 2. Hint bulunamazsa kategori bazlı ara (dosya ismindeki etiketlere göre)
+    if not chosen:
+        k = topic.lower()
+        if any(x in k for x in ["war","battle","viking","roman","ottoman","medieval","napoleon","soldier","crusade"]):
+            cat_tag = "war"
+        elif any(x in k for x in ["egypt","ancient","greek","sumerian","babylon","pharaoh","rome","persia"]):
+            cat_tag = "ancient"
+        elif any(x in k for x in ["space","technology","ai","future","science","robot","digital"]):
+            cat_tag = "space"
+        elif any(x in k for x in ["mystery","secret","conspiracy","paranormal","dark","unknown"]):
+            cat_tag = "mystery"
         else:
-            # Herhangi bir mp3 bul
-            all_mp3 = list(repo_root.glob("*.mp3"))
-            if all_mp3:
-                music_path = all_mp3[0]
-                tg(f"Fallback music: {music_path.name}","⚠")
-            else:
-                tg("No music files found in repo, using synth...","⚠")
-                return _synth_music_fallback(topic, duration_sec)
+            cat_tag = None
 
-    tg(f"Music loaded: {music_path.name}","✅")
-    return str(music_path)
+        if cat_tag:
+            matches = [m for m in all_mp3 if cat_tag in m.name.lower()]
+            if matches:
+                seed = int(hashlib.md5(topic.encode()).hexdigest()[:8],16)
+                chosen = matches[seed % len(matches)]
 
+    # 3. Hâlâ bulunamazsa rastgele bir MP3
+    if not chosen:
+        seed = int(hashlib.md5(topic.encode()).hexdigest()[:8],16)
+        chosen = all_mp3[seed % len(all_mp3)]
+        tg(f"Random music: {chosen.name}","⚠")
+
+    tg(f"Music: <b>{chosen.name}</b>","✅")
+    return str(chosen)
 
 def _synth_music_fallback(topic, duration_sec):
-    wav = WORK/"music.wav"
-    mp3 = WORK/"music.mp3"
-    k = topic.lower()
+    wav = WORK/"music.wav"; mp3 = WORK/"music.mp3"
     seed_val = int(hashlib.md5(topic.encode()).hexdigest()[:8],16) % 1000
-
-    if any(x in k for x in ["war","battle","viking","roman","ottoman","medieval","napoleon"]):
-        kategoriler = [
-            {"base":[55,110,165,220,82],"amps":[0.28,0.18,0.12,0.07,0.20],"chords":[1.0,1.12,0.94,1.06],"dur":6,"label":"epic_1"},
-            {"base":[41,82,123,165,55], "amps":[0.26,0.20,0.13,0.06,0.22],"chords":[1.0,1.19,0.89,1.12],"dur":5,"label":"epic_2"},
-        ]; bpm = 80
-    elif any(x in k for x in ["mystery","secret","dark","paranormal"]):
-        kategoriler = [
-            {"base":[73,110,155,207,87],"amps":[0.22,0.16,0.11,0.07,0.20],"chords":[1.0,1.06,0.89,1.12],"dur":7,"label":"mystery_1"},
-            {"base":[65,98,138,184,77], "amps":[0.24,0.17,0.10,0.06,0.21],"chords":[1.0,0.94,1.06,1.19],"dur":6,"label":"mystery_2"},
-        ]; bpm = 55
-    else:
-        kategoriler = [
-            {"base":[130,164,196,261,87],"amps":[0.20,0.16,0.12,0.07,0.18],"chords":[1.0,1.12,1.25,1.06],"dur":7,"label":"cinematic_1"},
-            {"base":[138,174,207,277,92],"amps":[0.18,0.15,0.13,0.08,0.17],"chords":[1.0,1.19,1.06,1.12],"dur":6,"label":"cinematic_2"},
-        ]; bpm = 70
-
+    kategoriler = [
+        {"base":[130,164,196,261,87],"amps":[0.20,0.16,0.12,0.07,0.18],"chords":[1.0,1.12,1.25,1.06],"dur":7,"label":"cinematic_1"},
+        {"base":[138,174,207,277,92],"amps":[0.18,0.15,0.13,0.08,0.17],"chords":[1.0,1.19,1.06,1.12],"dur":6,"label":"cinematic_2"},
+    ]; bpm = 70
     cfg = kategoriler[seed_val % len(kategoriler)]
     base_freqs,amps,chords,chord_dur,label = cfg["base"],cfg["amps"],cfg["chords"],cfg["dur"],cfg["label"]
     sr=44100; dur=int(min(duration_sec+30,7200)); n=sr*dur; fade=sr*3
     beat_period=int(sr*60/bpm); beat_env_len=int(sr*0.20)
-
-    def smooth_env(pos, length):
-        if pos >= length: return 0.0
-        return math.sin(math.pi * pos / length) ** 2
-
+    def smooth_env(pos,length):
+        if pos>=length: return 0.0
+        return math.sin(math.pi*pos/length)**2
     try:
         with open(wav,'wb') as f:
             dsize=n*2
@@ -292,32 +291,23 @@ def _synth_music_fallback(topic, duration_sec):
                 end=min(start+sr,n); buf=[]
                 for i in range(start,end):
                     t=i/sr
-                    chord_idx=int(t/chord_dur)%len(chords)
-                    chord_pos=t%chord_dur
+                    chord_idx=int(t/chord_dur)%len(chords); chord_pos=t%chord_dur
                     if chord_pos<0.5:
-                        prev_idx=(chord_idx-1)%len(chords)
-                        blend=chord_pos/0.5
-                        multiplier=chords[prev_idx]*(1-blend)+chords[chord_idx]*blend
-                    else:
-                        multiplier=chords[chord_idx]
-                    v=sum(a*math.sin(2*math.pi*fr*multiplier*t) for a,fr in zip(amps,base_freqs))
-                    v+=amps[0]*0.08*math.sin(2*math.pi*base_freqs[0]*multiplier*3*t)
-                    pos_in_beat=i%beat_period
-                    v+=0.10*smooth_env(pos_in_beat,beat_env_len)*math.sin(2*math.pi*70*multiplier*t)
+                        prev=(chord_idx-1)%len(chords); bl=chord_pos/0.5
+                        mul=chords[prev]*(1-bl)+chords[chord_idx]*bl
+                    else: mul=chords[chord_idx]
+                    v=sum(a*math.sin(2*math.pi*fr*mul*t) for a,fr in zip(amps,base_freqs))
+                    v+=amps[0]*0.08*math.sin(2*math.pi*base_freqs[0]*mul*3*t)
+                    v+=0.10*smooth_env(i%beat_period,beat_env_len)*math.sin(2*math.pi*70*mul*t)
                     v*=(1+0.02*math.sin(2*math.pi*0.15*t))
                     if i<fade: v*=i/fade
                     elif i>n-fade: v*=(n-i)/fade
                     buf.append(struct.pack('<h',int(max(-0.85,min(0.85,v))*32767)))
                 f.write(b''.join(buf))
-        r=subprocess.run(["ffmpeg","-y","-i",str(wav),
-            "-af","volume=2.0,highpass=f=40,lowpass=f=8000",
-            "-c:a","mp3","-b:a","128k",str(mp3)],
-            capture_output=True,text=True,timeout=180)
-        if r.returncode==0 and mp3.exists() and mp3.stat().st_size>1000:
-            tg(f"Synth music ready ({label})","✅")
-            return str(mp3)
-    except Exception as e:
-        tg(f"Synth error: {str(e)[:60]}","⚠")
+        r=subprocess.run(["ffmpeg","-y","-i",str(wav),"-af","volume=2.0,highpass=f=40,lowpass=f=8000",
+            "-c:a","mp3","-b:a","128k",str(mp3)],capture_output=True,text=True,timeout=180)
+        if r.returncode==0 and mp3.exists(): return str(mp3)
+    except: pass
     return ""
 
 # ─── IMAGES ──────────────────────────────────────────────────────────────────
@@ -339,7 +329,6 @@ def download_image(i, prompt, total, topic=""):
             if r.status_code==429: time.sleep(45)
             else: time.sleep(10)
         except: time.sleep(10)
-        # After 2 failed attempts, simplify prompt
         if attempt == 1:
             full_prompt = f"{topic} landscape cinematic dramatic no people 8k"
 
@@ -350,7 +339,7 @@ def download_image(i, prompt, total, topic=""):
 
 def generate_images(prompts, topic=""):
     n = len(prompts)
-    tg(f"Generating {n} images (sequential)...","🎨")
+    tg(f"Generating {n} images...","🎨")
     return [download_image(i,p,n,topic) for i,p in enumerate(prompts)]
 
 # ─── THUMBNAIL ───────────────────────────────────────────────────────────────
@@ -383,7 +372,7 @@ def generate_thumbnail(prompt, text, color, topic):
 
 # ─── AUDIO + SUBTITLES ───────────────────────────────────────────────────────
 def generate_audio(script):
-    tg("Generating English narration (Guy - deep voice)...","🎙")
+    tg("Generating English narration...","🎙")
     sf=WORK/"script.txt"; rf=WORK/"audio_raw.mp3"
     sub_vtt=WORK/"subtitles.vtt"; sub_srt=WORK/"subtitles.srt"
     sf.write_text(script,encoding="utf-8")
@@ -423,7 +412,7 @@ def mix_audio(narration, music, duration):
         pb=subprocess.run(["ffprobe","-v","quiet","-print_format","json","-show_format",music],capture_output=True,text=True)
         ms=float(json.loads(pb.stdout)["format"]["duration"])
         if ms<3: return narration
-        tg(f"Mixing audio + music ({ms:.0f}s music)...","🎚")
+        tg(f"Mixing audio + music ({ms:.0f}s)...","🎚")
     except: return narration
 
     mixed=WORK/"mixed.mp3"
@@ -432,7 +421,7 @@ def mix_audio(narration, music, duration):
          "-stream_loop","-1","-i",music,
          "-filter_complex",
          "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
-         "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.4[a2];"
+         "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.35[a2];"
          "[a1][a2]amix=inputs=2:duration=first:weights=1 0.6[aout]",
          "-map","[aout]",
          "-c:a","libmp3lame","-b:a","192k",
@@ -442,45 +431,57 @@ def mix_audio(narration, music, duration):
     if r.returncode==0 and mixed.exists() and mixed.stat().st_size>50000:
         tg(f"Music mixed! ({mixed.stat().st_size//1024}KB)","✅")
         return str(mixed)
-    tg(f"Mix failed, continuing without music","⚠")
+    tg("Mix failed, continuing without music","⚠")
     return narration
 
 # ─── VIDEO ASSEMBLY ───────────────────────────────────────────────────────────
 def assemble_video(images, audio, subtitle_srt, total_duration):
-    tg(f"Assembling video...\n{len(images)} images | 6 effects\n⏳ ~{len(images)//2+5} min","🎬")
+    tg(f"Assembling video...\n{len(images)} images | smooth effects\n⏳ ~{len(images)//2+5} min","🎬")
 
     img_dur = total_duration / len(images)
-    effects = ["zoompan=z='min(zoom+0.0008,1.3)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
-               "zoompan=z='if(lte(zoom,1.0),1.3,max(1.0,zoom-0.0008))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)'",
-               "zoompan=z='1.15':x='if(lte(on,1),0,x+0.5)':y='ih/2-(ih/zoom/2)'",
-               "zoompan=z='1.15':x='if(lte(on,1),iw,x-0.5)':y='ih/2-(ih/zoom/2)'",
-               "zoompan=z='1.15':x='iw/2-(iw/zoom/2)':y='if(lte(on,1),0,y+0.3)'",
-               "zoompan=z='1.15':x='iw/2-(iw/zoom/2)':y='if(lte(on,1),ih,y-0.3)'"]
+    fps = 30
+
+    # Smooth zoompan efektleri - fps=30, yüksek d değeri
+    def make_effect(idx, frames):
+        effects = [
+            # Zoom in - smooth
+            f"zoompan=z='min(zoom+0.0003,1.25)':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
+            # Zoom out - smooth
+            f"zoompan=z='if(lte(zoom,1.0),1.25,max(1.0,zoom-0.0003))':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
+            # Pan left to right - smooth
+            f"zoompan=z='1.15':x='iw/2-(iw/zoom/2)+((iw*0.1/zoom)*on/{frames})':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
+            # Pan right to left - smooth
+            f"zoompan=z='1.15':x='iw/2-(iw/zoom/2)+((iw*0.1/zoom)*(1-on/{frames}))':y='ih/2-(ih/zoom/2)':d={frames}:s=1920x1080:fps={fps}",
+            # Pan up - smooth
+            f"zoompan=z='1.15':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)+((ih*0.08/zoom)*on/{frames})':d={frames}:s=1920x1080:fps={fps}",
+            # Pan down - smooth
+            f"zoompan=z='1.15':x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)+((ih*0.08/zoom)*(1-on/{frames}))':d={frames}:s=1920x1080:fps={fps}",
+        ]
+        return effects[idx % len(effects)]
 
     clips = []
-    for idx,img in enumerate(images):
+    for idx, img in enumerate(images):
         clip = WORK/f"clip_{idx:02d}.mp4"
-        eff  = effects[idx % len(effects)]
-        fps  = 25
         frames = int(img_dur * fps)
-        vf = (f"{eff}:d={frames}:s=1920x1080:fps={fps},"
-              f"vignette=PI/4,"
-              f"format=yuv420p")
+        eff = make_effect(idx, frames)
+        vf = f"{eff},vignette=PI/4,format=yuv420p"
+
         r=subprocess.run(["ffmpeg","-y","-loop","1","-i",img,
-            "-vf",vf,"-t",str(img_dur),
-            "-c:v","libx264","-preset","fast","-crf","23",
-            "-r",str(fps),str(clip)],
-            capture_output=True,text=True,timeout=300)
+            "-vf", vf,
+            "-t", str(img_dur),
+            "-c:v","libx264","-preset","fast","-crf","20",
+            "-r", str(fps),
+            str(clip)],
+            capture_output=True, text=True, timeout=300)
         if r.returncode==0 and clip.exists():
             clips.append(str(clip))
             tg(f"Clip {idx+1}/{len(images)} ✓","🎞")
         else:
-            tg(f"Clip {idx+1} failed","⚠")
+            tg(f"Clip {idx+1} failed: {r.stderr[-60:]}","⚠")
 
     if not clips:
         raise Exception("No clips generated")
 
-    # Concat
     concat_list = WORK/"concat.txt"
     concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in clips))
     raw_video = WORK/"video_raw.mp4"
@@ -490,16 +491,15 @@ def assemble_video(images, audio, subtitle_srt, total_duration):
     if r.returncode!=0 or not raw_video.exists():
         raise Exception(f"Concat failed: {r.stderr[-100:]}")
 
-    # Add audio + subtitles
     final_video = WORK/"final_video.mp4"
     if subtitle_srt and os.path.exists(subtitle_srt):
-        srt_escaped = str(subtitle_srt).replace('\\','/').replace(':','\\:')
-        vf_sub = (f"subtitles={srt_escaped}:force_style='"
+        srt_esc = str(subtitle_srt).replace('\\','/').replace(':','\\:')
+        vf_sub = (f"subtitles={srt_esc}:force_style='"
                   f"FontSize=14,PrimaryColour=&H00FFFF00,"
                   f"OutlineColour=&H00000000,Outline=2,BorderStyle=1,"
                   f"Alignment=2,MarginV=30'")
         r=subprocess.run(["ffmpeg","-y","-i",str(raw_video),"-i",audio,
-            "-vf",vf_sub,"-c:v","libx264","-preset","fast","-crf","23",
+            "-vf",vf_sub,"-c:v","libx264","-preset","fast","-crf","20",
             "-c:a","aac","-b:a","192k","-shortest",str(final_video)],
             capture_output=True,text=True,timeout=7200)
     else:
@@ -577,39 +577,24 @@ def main():
     except Exception as e:
         tg(f"Command error: {e}","❌"); sys.exit(1)
 
-    topic    = params["topic"]
-    duration = params["duration"]
-    img_count= params["img_count"]
-    pub_iso  = params["publish_iso"]
+    topic      = params["topic"]
+    music_hint = params["music_hint"]
+    duration   = params["duration"]
+    img_count  = params["img_count"]
+    pub_iso    = params["publish_iso"]
 
-    tg(f"<b>{topic}</b> | {duration} min | {img_count} images\n📅 {pub_iso}","📋")
+    tg(f"<b>{topic}</b> | {duration} min | {img_count} images\n🎵 Music hint: {music_hint}\n📅 {pub_iso}","📋")
 
     try:
-        # 1. Content + SEO + Script
         meta = generate_content(topic, duration, img_count)
-
-        # 2. Music
-        music = generate_music(topic, duration*60)
-
-        # 3. Images
+        music = generate_music(topic, duration*60, music_hint)
         images = generate_images(meta["image_prompts"], topic)
-
-        # 4. Thumbnail
         generate_thumbnail(meta["thumbnail_prompt"], meta["thumbnail_text"], meta["color"], topic)
-
-        # 5. Audio + Subtitles
         audio, audio_dur, subtitle_srt = generate_audio(meta["script"])
-
-        # 6. Mix music
         final_audio = mix_audio(audio, music, audio_dur)
-
-        # 7. Assemble video
         video = assemble_video(images, final_audio, subtitle_srt, audio_dur)
-
-        # 8. Upload
         vid_id = upload_youtube(video, meta, pub_iso)
         upload_thumbnail(vid_id, str(WORK/"thumbnail.jpg"))
-
         tg(f"✅ DONE!\nyoutube.com/watch?v={vid_id}","🎬")
 
     except Exception as e:
