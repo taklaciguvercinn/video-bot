@@ -438,6 +438,7 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
 
     fade_sure = 0.6
     gecis_tipleri = ["fade", "fade", "dissolve", "brightness", "fade"]
+    parlama_renkleri = ["white", "0x4444ff", "0xff2222"]
 
     def efekt_sec(idx, frames, duration):
         half = frames // 2
