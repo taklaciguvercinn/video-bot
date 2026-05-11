@@ -436,44 +436,50 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
     fps = 30
     fade_sure = 0.8
 
-    def efekt_sec(idx, frames):
-        # Sadece zoom in / zoom out, yavaş ve smooth, titreme yok
-        if idx % 2 == 0:
-            # Zoom in: 1.0'dan 1.08'e çok yavaş
-            return (f"scale=8000:-1,zoompan="
-                    f"z='1.0+(0.08*on/{frames})':"
-                    f"x='iw/2-(iw/zoom/2)':"
-                    f"y='ih/2-(ih/zoom/2)':"
-                    f"d={frames}:s=1920x1080:fps={fps}")
+    fade_sure = 0.6
+    gecis_tipleri = ["fade", "fade", "dissolve", "brightness", "fade"]
+
+    def efekt_sec(idx, frames, duration):
+        half = frames // 2
+        vf = (
+            f"scale=8000:-1,"
+            f"crop=w='iw/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half}))'"
+            f":h='ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half}))'"
+            f":x='(iw-iw/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2'"
+            f":y='(ih-ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2',"
+            f"scale=1920:1080,"
+            f"vignette=PI/4"
+        )
+        gecis = gecis_tipleri[idx % len(gecis_tipleri)]
+        if gecis == "dissolve":
+            vf += (f",fade=t=in:st=0:d={fade_sure}:alpha=1,"
+                   f"fade=t=out:st={duration-fade_sure:.2f}:d={fade_sure}:alpha=1")
+        elif gecis == "brightness":
+            vf += (f",fade=t=in:st=0:d={fade_sure}:color=black,"
+                   f"fade=t=out:st={duration-fade_sure:.2f}:d={fade_sure}:color=black")
         else:
-            # Zoom out: 1.08'den 1.0'a çok yavaş
-            return (f"scale=8000:-1,zoompan="
-                    f"z='1.08-(0.08*on/{frames})':"
-                    f"x='iw/2-(iw/zoom/2)':"
-                    f"y='ih/2-(ih/zoom/2)':"
-                    f"d={frames}:s=1920x1080:fps={fps}")
+            vf += (f",fade=t=in:st=0:d={fade_sure},"
+                   f"fade=t=out:st={duration-fade_sure:.2f}:d={fade_sure}")
+        vf += ",format=yuv420p"
+        return vf
 
     klipler = []
     for idx, gorsel in enumerate(gorseller):
         klip = WORK/f"clip_{idx:02d}.mp4"
         frames = int(gorsel_sure * fps)
-        eff = efekt_sec(idx, frames)
+        vf = efekt_sec(idx, frames, gorsel_sure)
 
-        # Her 4 sahnede bir ışık parlaması
+        parlama_renkleri = ["white", "0x4444ff", "0xff2222"]
         parlama = (idx % 4 == 3)
+        parlama_renk = parlama_renkleri[idx // 4 % len(parlama_renkleri)]
         if parlama:
-            vf = (f"{eff},"
-                  f"vignette=PI/4,"
-                  f"curves=all='0/0 0.3/0.3 0.5/1.0 0.7/0.7 1/1'[base];"
-                  f"[base]fade=t=in:st=0:d=0.3:color=white,"
-                  f"fade=t=out:st={gorsel_sure-0.3:.2f}:d=0.3,"
-                  f"format=yuv420p")
-        else:
-            vf = (f"{eff},"
-                  f"vignette=PI/4,"
-                  f"fade=t=in:st=0:d={fade_sure},"
-                  f"fade=t=out:st={gorsel_sure-fade_sure:.2f}:d={fade_sure},"
-                  f"format=yuv420p")
+            vf = vf.replace(
+                f"fade=t=in:st=0:d={fade_sure},",
+                f"fade=t=in:st=0:d=0.4:color={parlama_renk},"
+            ).replace(
+                f"fade=t=out:st={gorsel_sure-fade_sure:.2f}:d={fade_sure}",
+                f"fade=t=out:st={gorsel_sure-0.4:.2f}:d=0.4:color={parlama_renk}"
+            )
 
         r=subprocess.run(["ffmpeg","-y","-loop","1","-i",gorsel,
             "-vf",vf,"-t",str(gorsel_sure),
@@ -482,7 +488,7 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
             capture_output=True,text=True,timeout=300)
         if r.returncode==0 and klip.exists():
             klipler.append(str(klip))
-            tg(f"Klip {idx+1}/{len(gorseller)} {'⚡' if parlama else '✓'}","🎞")
+            tg(f"Klip {idx+1}/{len(gorseller)} {'⚡' if parlama else '✓'} {'🔵' if parlama_renk=='0x4444ff' else '🔴' if parlama_renk=='0xff2222' else '⚪'}","🎞")
         else:
             tg(f"Klip {idx+1} hatasi: {r.stderr[-60:]}","⚠")
 
