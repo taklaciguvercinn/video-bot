@@ -468,8 +468,6 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
         klip = WORK/f"clip_{idx:02d}.mp4"
         frames = int(gorsel_sure * fps)
         vf = efekt_sec(idx, frames, gorsel_sure)
-
-        parlama_renkleri = ["white", "0x4444ff", "0xff2222"]
         parlama = (idx % 4 == 3)
         parlama_renk = parlama_renkleri[idx // 4 % len(parlama_renkleri)]
         if parlama:
