@@ -429,16 +429,17 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
             f"y='(ih-ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2',"
             f"scale=1920:1080,vignette=PI/4"
         )
-        if parlama:
-            return (f"{zoom},"
-                    f"fade=t=in:st=0:d=0.4:color={p_renk},"
-                    f"fade=t=out:st={dur-0.4:.2f}:d=0.4:color={p_renk},"
-                    f"format=yuv420p")
-        tip = gecisler[idx % len(gecisler)]
+        # Her klipte mutlaka fade in + fade out
         fi = f"fade=t=in:st=0:d={fade_sure}"
         fo = f"fade=t=out:st={dur-fade_sure:.2f}:d={fade_sure}"
-        if tip == "dissolve": fi+=":alpha=1"; fo+=":alpha=1"
-        elif tip == "brightness": fi+=":color=black"; fo+=":color=black"
+        if parlama:
+            # Parlama kliplerinde renkli fade
+            fi = f"fade=t=in:st=0:d=0.5:color={p_renk}"
+            fo = f"fade=t=out:st={dur-0.5:.2f}:d=0.5:color={p_renk}"
+        else:
+            tip = gecisler[idx % len(gecisler)]
+            if tip == "dissolve": fi+=":alpha=1"; fo+=":alpha=1"
+            elif tip == "brightness": fi+=":color=black"; fo+=":color=black"
         return f"{zoom},{fi},{fo},format=yuv420p"
 
     klipler = []
