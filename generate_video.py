@@ -58,20 +58,25 @@ def gemini(prompt, max_tokens=8192):
         headers = {"Content-Type":"application/json","x-goog-api-key":GEMINI_API_KEY}
         body = {"contents":[{"parts":[{"text":prompt}]}],
                 "generationConfig":{"temperature":0.7,"maxOutputTokens":max_tokens}}
-        for _ in range(2):
+        for attempt in range(3):
             try:
-                r = requests.post(url,headers=headers,json=body,timeout=90)
+                r = requests.post(url,headers=headers,json=body,timeout=120)
                 if r.status_code == 200:
                     c = r.json().get("candidates",[])
                     if c:
                         t = c[0].get("content",{}).get("parts",[{}])[0].get("text","").strip()
                         if t: return t,model
-                    time.sleep(5)
-                elif r.status_code == 429: time.sleep(15)
-                elif r.status_code == 503: break
+                    time.sleep(8)
+                elif r.status_code == 429:
+                    wait = 30 + attempt * 20
+                    tg(f"{model} rate limit, {wait}sn bekleniyor...","⏳")
+                    time.sleep(wait)
+                elif r.status_code == 503:
+                    time.sleep(15); break
                 else:
                     tg(f"{model}: {r.json().get('error',{}).get('message','')[:50]}","⚠"); break
-            except requests.Timeout: time.sleep(10)
+            except requests.Timeout:
+                time.sleep(15)
     raise Exception("Gemini yanit vermedi")
 
 def json_cikart(ham):
@@ -104,9 +109,8 @@ def telaffuz(metin):
 # ─── İÇERİK ──────────────────────────────────────────────────────────────────
 def senaryo_uret(konu, sure, resim_sayisi):
     tg(f"'{konu}' icin icerik uretiliyor...","📚")
-    kelime = sure * 170  # daha uzun script
+    kelime = sure * 170
 
-    # Gemini'den konuya özel görsel promptları üret
     tg(f"{resim_sayisi} gorsel promptu uretiliyor...","🎨")
     gorseller = []
     try:
@@ -135,7 +139,6 @@ KURALLAR:
     except Exception as e:
         tg(f"Gorsel prompt hatasi: {e}","⚠")
 
-    # Yeterli prompt yoksa fallback
     while len(gorseller) < resim_sayisi:
         i = len(gorseller)
         gorseller.append(f"{konu} cinematic dramatic scene {i+1}, no people, 8k atmospheric lighting")
@@ -150,7 +153,6 @@ KURALLAR:
         "renk": "#1a1a2e"
     }
 
-    # SEO
     tg("SEO optimize ediliyor...","📋")
     try:
         h,model = gemini(
@@ -164,7 +166,6 @@ KURALLAR:
         tg(f"SEO hazir: <b>{meta['baslik']}</b>","✅")
     except: tg("SEO varsayilan","⚠")
 
-    # Senaryo - uzun ve kesin
     tg(f"Senaryo yaziliyor ({kelime} kelime)...","📝")
     p2 = f"""Sen profesyonel bir belgesel anlatıcısısın. {konu} hakkında {sure} dakikalık bir belgesel için metin yazacaksın.
 
