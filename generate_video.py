@@ -447,11 +447,22 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
         klip    = WORK/f"clip_{idx:02d}.mp4"
         parlama = (idx % 4 == 3)
         p_renk  = p_renkler[(idx // 4) % len(p_renkler)]
-        vf      = make_vf(idx, gorsel_sure, parlama, p_renk)
+
+        half = max(int(gorsel_sure * fps) // 2, 1)
+        zoom = (
+            f"scale=8000:-1,"
+            f"crop="
+            f"w='iw/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half}))':"
+            f"h='ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half}))':"
+            f"x='(iw-iw/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2':"
+            f"y='(ih-ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2',"
+            f"scale=1920:1080,vignette=PI/4,format=yuv420p"
+        )
+        # Fade YOK — xfade ile birleştirilecek, her klip tam açık başlar ve biter
 
         r = subprocess.run(
             ["ffmpeg","-y","-loop","1","-i",gorsel,
-             "-vf",vf,"-t",str(gorsel_sure),
+             "-vf",zoom,"-t",str(gorsel_sure),
              "-c:v","libx264","-preset","fast","-crf","20",
              "-r",str(fps),str(klip)],
             capture_output=True,text=True,timeout=300)
@@ -464,14 +475,62 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
 
     if not klipler: raise Exception("Hic klip olusturulamadi")
 
-    concat_list = WORK/"concat.txt"
-    concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in klipler))
-    ham_video = WORK/"video_ham.mp4"
-    r = subprocess.run(["ffmpeg","-y","-f","concat","-safe","0",
-        "-i",str(concat_list.resolve()),"-c:v","copy",str(ham_video)],
-        capture_output=True,text=True,timeout=3600)
-    if r.returncode!=0 or not ham_video.exists():
-        raise Exception(f"Concat hatasi: {r.stderr[-100:]}")
+    # xfade ile klipleri birleştir — smooth fade geçiş
+    tg("Klipleri xfade ile birlestiriyor...","🎬")
+    xfade_sure = fade_sure  # geçiş süresi
+    gecis_tipleri_xfade = ["fade","dissolve","fadeblack","fadegrays","smoothleft"]
+
+    if len(klipler) == 1:
+        ham_video = WORK/"video_ham.mp4"
+        subprocess.run(["cp", klipler[0], str(ham_video)])
+    else:
+        # İlk iki klibi birleştir, sonra birer birer ekle
+        gecici = WORK/"xfade_tmp.mp4"
+        ham_video = WORK/"video_ham.mp4"
+
+        onceki = klipler[0]
+        onceki_sure = gorsel_sure
+
+        for i in range(1, len(klipler)):
+            cikti = WORK/f"xfade_{i:02d}.mp4"
+            gecis = gecis_tipleri_xfade[i % len(gecis_tipleri_xfade)]
+            offset = max(onceki_sure - xfade_sure, 0.1)
+
+            # parlama klibinde renkli flash ekle
+            parlama = ((i) % 4 == 3)
+            p_renk = p_renkler[(i // 4) % len(p_renkler)]
+            if parlama:
+                gecis_str = f"xfade=transition=fade:duration={xfade_sure}:offset={offset:.3f}"
+                # flash efekti için parlama klibine overlay
+                flash_vf = (f"[0:v][1:v]{gecis_str}[xv];"
+                           f"[xv]fade=t=in:st={offset:.3f}:d=0.3:color={p_renk},"
+                           f"fade=t=out:st={offset+xfade_sure:.3f}:d=0.3:color={p_renk}[outv]")
+            else:
+                flash_vf = f"[0:v][1:v]xfade=transition={gecis}:duration={xfade_sure}:offset={offset:.3f}[outv]"
+
+            r = subprocess.run(
+                ["ffmpeg","-y","-i",str(onceki),"-i",klipler[i],
+                 "-filter_complex", flash_vf,
+                 "-map","[outv]",
+                 "-c:v","libx264","-preset","fast","-crf","20",
+                 "-r",str(fps),str(cikti)],
+                capture_output=True,text=True,timeout=600)
+
+            if r.returncode==0 and cikti.exists():
+                onceki = str(cikti)
+                onceki_sure = onceki_sure + gorsel_sure - xfade_sure
+                tg(f"Gecis {i}/{len(klipler)-1} ✓","🔗")
+            else:
+                tg(f"Gecis {i} hatasi, concat kullaniliyor...","⚠")
+                # xfade başarısız olursa basit concat
+                concat_list = WORK/"concat.txt"
+                concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in klipler))
+                subprocess.run(["ffmpeg","-y","-f","concat","-safe","0",
+                    "-i",str(concat_list.resolve()),"-c:v","copy",str(ham_video)],
+                    capture_output=True,text=True,timeout=3600)
+                break
+        else:
+            subprocess.run(["cp", str(onceki), str(ham_video)])
 
     final_video = WORK/"final_video.mp4"
     if altyazi_srt and os.path.exists(altyazi_srt):
