@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Video Bot Turkish v12"""
+"""Video Bot Turkish v12.1 - xfade kaldirildi"""
 
 import sys,os,json,time,requests,subprocess,re,struct,math,hashlib
 from datetime import datetime
