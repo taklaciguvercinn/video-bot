@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Video Bot Turkish v12"""
+"""Video Bot Turkish v12.2"""
 
 import sys,os,json,time,requests,subprocess,re,struct,math,hashlib
 from datetime import datetime
@@ -114,18 +114,17 @@ def senaryo_uret(konu, sure, resim_sayisi):
     tg(f"{resim_sayisi} gorsel promptu uretiliyor...","🎨")
     gorseller = []
     try:
-        p_img = f"""Sen bir görsel sanatçısın. {konu} hakkında bir belgesel için tam olarak {resim_sayisi} adet benzersiz görsel promptu üret.
+        p_img = f"""Sen bir gorsel sanatcisin. {konu} hakkinda bir belgesel icin tam olarak {resim_sayisi} adet benzersiz gorsel promptu uret.
 
 KURALLAR:
-- Her prompt {konu} ile doğrudan ilgili olmalı - spesifik sahneler, mekanlar, nesneler, olaylar
-- Görsellerde KESİNLİKLE insan, yüz, yazı olmasın
-- Sinematik, dramatik, yüksek kalite fotoğraf tarzı
-- Her prompt İNGİLİZCE olsun (görsel üretici İngilizce anlar)
-- Her prompt yeni satırda, 1'den {resim_sayisi}'e kadar numaralı
-- Her prompt 100 karakterden kısa olsun
-- Çeşitli sahneler: geniş çekim, yakın plan, havadan görünüm, atmosferik çekim
+- Her prompt {konu} ile dogrudan ilgili olmali
+- Gorsellerde KESINLIKLE insan, yuz, yazi olmasin
+- Sinematik, dramatik, yuksek kalite fotograf tarzi
+- Her prompt INGILIZCE olsun
+- Her prompt yeni satirda, 1 den {resim_sayisi} e kadar numarali
+- Her prompt 100 karakterden kisa olsun
 
-Şimdi {resim_sayisi} prompt üret:"""
+Simdi {resim_sayisi} prompt uret:"""
         raw, _ = gemini(p_img, max_tokens=2048)
         lines = [l.strip() for l in raw.split('\n') if l.strip()]
         for line in lines:
@@ -167,19 +166,17 @@ KURALLAR:
     except: tg("SEO varsayilan","⚠")
 
     tg(f"Senaryo yaziliyor ({kelime} kelime)...","📝")
-    p2 = f"""Sen profesyonel bir belgesel anlatıcısısın. {konu} hakkında {sure} dakikalık bir belgesel için metin yazacaksın.
+    p2 = f"""Sen profesyonel bir belgesel anlaticisisin. {konu} hakkinda {sure} dakikalik bir belgesel icin metin yazacaksin.
 
-KESİN KURALLAR:
-- MUTLAKA {kelime} kelime veya daha fazla yaz. Kelime sayısını dikkatli say.
-- SADECE anlatım metni yaz - düz akan paragraflar
-- Hiçbir sahne yönergesi, [köşeli parantez], (parantez), müzik notu yazma
-- "Anlatıcı:" yazma, başlık yazma, madde işareti yazma, numara yazma
-- {kelime} kelimeye ulaşana kadar yazmayı bırakma - erken durma
-- {konu} konusunun tüm tarihini, arka planını, önemli olaylarını, önemini ve mirasını ele al
+KESIN KURALLAR:
+- MUTLAKA {kelime} kelime veya daha fazla yaz.
+- SADECE anlatim metni yaz - duz akan paragraflar
+- Hicbir sahne yonergesi, kose parantez, parantez, muzik notu yazma
+- Anlatici yazma, baslik yazma, madde isareti yazma
+- {kelime} kelimeye ulasana kadar yazmayi birakma
 - Apostrof kullanma, emoji kullanma
-- Üslup: ulusal coğrafya belgeseli gibi sürükleyici, dramatik, bilgilendirici
 
-Şimdi başla ve {kelime}+ kelime yaz:"""
+Simdi basla ve {kelime}+ kelime yaz:"""
 
     senaryo = ""
     for attempt in range(4):
@@ -187,7 +184,6 @@ KESİN KURALLAR:
             h,model = gemini(p2, max_tokens=8192)
             h = re.sub(r'\[.*?\]','',h,flags=re.DOTALL)
             h = re.sub(r'\(.*?\)','',h,flags=re.DOTALL)
-            h = re.sub(r'Anlat[ıi]c[ıi]\s*:','',h,flags=re.IGNORECASE)
             h = re.sub(r'^\*+\s*|^#+\s.*$','',h,flags=re.MULTILINE)
             h = re.sub(r'\n{3,}','\n\n',h).strip()
             wc = len(h.split())
@@ -213,7 +209,7 @@ def muzik_uret(konu, sure_sn, muzik_hint=""):
     repo_root = Path(os.environ.get("GITHUB_WORKSPACE","."))
     all_mp3 = list(repo_root.glob("*.mp3"))
     if not all_mp3:
-        tg("Repoda MP3 yok!","⚠"); return _synth_fallback(konu, sure_sn)
+        tg("Repoda MP3 yok!","⚠"); return ""
 
     def clean(s): return re.sub(r"[^a-z0-9]","",s.lower())
     chosen = None
@@ -246,33 +242,6 @@ def muzik_uret(konu, sure_sn, muzik_hint=""):
 
     tg(f"Muzik: <b>{chosen.name}</b> ({chosen.stat().st_size//1024}KB)","✅")
     return str(chosen)
-
-def _synth_fallback(konu, sure_sn):
-    wav=WORK/"muzik.wav"; mp3=WORK/"muzik.mp3"
-    sr=44100; dur=int(min(sure_sn+30,7200)); n=sr*dur; fade=sr*3
-    try:
-        with open(wav,'wb') as f:
-            dsize=n*2
-            f.write(b'RIFF'); f.write(struct.pack('<I',36+dsize))
-            f.write(b'WAVEfmt '); f.write(struct.pack('<I',16))
-            f.write(struct.pack('<H',1)); f.write(struct.pack('<H',1))
-            f.write(struct.pack('<I',sr)); f.write(struct.pack('<I',sr*2))
-            f.write(struct.pack('<H',2)); f.write(struct.pack('<H',16))
-            f.write(b'data'); f.write(struct.pack('<I',dsize))
-            freqs=[130,164,196,261,87]; amps=[0.20,0.16,0.12,0.07,0.18]
-            for start in range(0,n,sr):
-                end=min(start+sr,n); buf=[]
-                for i in range(start,end):
-                    t=i/sr; v=sum(a*math.sin(2*math.pi*fr*t) for a,fr in zip(amps,freqs))
-                    if i<fade: v*=i/fade
-                    elif i>n-fade: v*=(n-i)/fade
-                    buf.append(struct.pack('<h',int(max(-0.85,min(0.85,v))*32767)))
-                f.write(b''.join(buf))
-        r=subprocess.run(["ffmpeg","-y","-i",str(wav),"-af","volume=2.0",
-            "-c:a","mp3","-b:a","128k",str(mp3)],capture_output=True,timeout=180)
-        if r.returncode==0 and mp3.exists(): return str(mp3)
-    except: pass
-    return ""
 
 # ─── GÖRSELLER ───────────────────────────────────────────────────────────────
 def gorsel_indir(i, prompt, toplam, konu=""):
@@ -410,37 +379,12 @@ def ses_miksle(anlati, muzik, sure):
 
 # ─── VİDEO ───────────────────────────────────────────────────────────────────
 def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
-    tg(f"Video uretiliyor...\n{len(gorseller)} gorsel | fade + parlama efekti\n⏳ ~{len(gorseller)//2+5} dk","🎬")
+    tg(f"Video uretiliyor...\n{len(gorseller)} gorsel | fade gecisler\n⏳ ~{len(gorseller)//2+5} dk","🎬")
 
     gorsel_sure = toplam_sure / len(gorseller)
     fps         = 30
-    fade_sure   = 0.6
-    gecisler    = ["fade","dissolve","brightness","fade","dissolve"]
+    fade_sure   = 0.5
     p_renkler   = ["white","0x4444ff","0xff2222"]
-
-    def make_vf(idx, dur, parlama, p_renk):
-        half = max(int(dur * fps) // 2, 1)
-        zoom = (
-            f"scale=8000:-1,"
-            f"crop="
-            f"w='iw/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half}))':"
-            f"h='ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half}))':"
-            f"x='(iw-iw/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2':"
-            f"y='(ih-ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2',"
-            f"scale=1920:1080,vignette=PI/4"
-        )
-        # Her klipte mutlaka fade in + fade out
-        fi = f"fade=t=in:st=0:d={fade_sure}"
-        fo = f"fade=t=out:st={dur-fade_sure:.2f}:d={fade_sure}"
-        if parlama:
-            # Parlama kliplerinde renkli fade
-            fi = f"fade=t=in:st=0:d=0.5:color={p_renk}"
-            fo = f"fade=t=out:st={dur-0.5:.2f}:d=0.5:color={p_renk}"
-        else:
-            tip = gecisler[idx % len(gecisler)]
-            if tip == "dissolve": fi+=":alpha=1"; fo+=":alpha=1"
-            elif tip == "brightness": fi+=":color=black"; fo+=":color=black"
-        return f"{zoom},{fi},{fo},format=yuv420p"
 
     klipler = []
     for idx, gorsel in enumerate(gorseller):
@@ -456,13 +400,30 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
             f"h='ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half}))':"
             f"x='(iw-iw/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2':"
             f"y='(ih-ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2',"
-            f"scale=1920:1080,vignette=PI/4,format=yuv420p"
+            f"scale=1920:1080,vignette=PI/4"
         )
-        # Fade YOK — xfade ile birleştirilecek, her klip tam açık başlar ve biter
+
+        if parlama:
+            vf = (f"{zoom},"
+                  f"fade=t=in:st=0:d=0.4:color={p_renk},"
+                  f"fade=t=out:st={gorsel_sure-0.4:.2f}:d=0.4:color={p_renk},"
+                  f"format=yuv420p")
+        elif idx % 3 == 1:
+            # Siyahtan acilip siyaha kapan
+            vf = (f"{zoom},"
+                  f"fade=t=in:st=0:d={fade_sure}:color=black,"
+                  f"fade=t=out:st={gorsel_sure-fade_sure:.2f}:d={fade_sure}:color=black,"
+                  f"format=yuv420p")
+        else:
+            # Normal fade
+            vf = (f"{zoom},"
+                  f"fade=t=in:st=0:d={fade_sure},"
+                  f"fade=t=out:st={gorsel_sure-fade_sure:.2f}:d={fade_sure},"
+                  f"format=yuv420p")
 
         r = subprocess.run(
             ["ffmpeg","-y","-loop","1","-i",gorsel,
-             "-vf",zoom,"-t",str(gorsel_sure),
+             "-vf",vf,"-t",str(gorsel_sure),
              "-c:v","libx264","-preset","fast","-crf","20",
              "-r",str(fps),str(klip)],
             capture_output=True,text=True,timeout=300)
@@ -475,62 +436,14 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
 
     if not klipler: raise Exception("Hic klip olusturulamadi")
 
-    # xfade ile klipleri birleştir — smooth fade geçiş
-    tg("Klipleri xfade ile birlestiriyor...","🎬")
-    xfade_sure = fade_sure  # geçiş süresi
-    gecis_tipleri_xfade = ["fade","dissolve","fadeblack","fadegrays","smoothleft"]
-
-    if len(klipler) == 1:
-        ham_video = WORK/"video_ham.mp4"
-        subprocess.run(["cp", klipler[0], str(ham_video)])
-    else:
-        # İlk iki klibi birleştir, sonra birer birer ekle
-        gecici = WORK/"xfade_tmp.mp4"
-        ham_video = WORK/"video_ham.mp4"
-
-        onceki = klipler[0]
-        onceki_sure = gorsel_sure
-
-        for i in range(1, len(klipler)):
-            cikti = WORK/f"xfade_{i:02d}.mp4"
-            gecis = gecis_tipleri_xfade[i % len(gecis_tipleri_xfade)]
-            offset = max(onceki_sure - xfade_sure, 0.1)
-
-            # parlama klibinde renkli flash ekle
-            parlama = ((i) % 4 == 3)
-            p_renk = p_renkler[(i // 4) % len(p_renkler)]
-            if parlama:
-                gecis_str = f"xfade=transition=fade:duration={xfade_sure}:offset={offset:.3f}"
-                # flash efekti için parlama klibine overlay
-                flash_vf = (f"[0:v][1:v]{gecis_str}[xv];"
-                           f"[xv]fade=t=in:st={offset:.3f}:d=0.3:color={p_renk},"
-                           f"fade=t=out:st={offset+xfade_sure:.3f}:d=0.3:color={p_renk}[outv]")
-            else:
-                flash_vf = f"[0:v][1:v]xfade=transition={gecis}:duration={xfade_sure}:offset={offset:.3f}[outv]"
-
-            r = subprocess.run(
-                ["ffmpeg","-y","-i",str(onceki),"-i",klipler[i],
-                 "-filter_complex", flash_vf,
-                 "-map","[outv]",
-                 "-c:v","libx264","-preset","fast","-crf","20",
-                 "-r",str(fps),str(cikti)],
-                capture_output=True,text=True,timeout=600)
-
-            if r.returncode==0 and cikti.exists():
-                onceki = str(cikti)
-                onceki_sure = onceki_sure + gorsel_sure - xfade_sure
-                tg(f"Gecis {i}/{len(klipler)-1} ✓","🔗")
-            else:
-                tg(f"Gecis {i} hatasi, concat kullaniliyor...","⚠")
-                # xfade başarısız olursa basit concat
-                concat_list = WORK/"concat.txt"
-                concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in klipler))
-                subprocess.run(["ffmpeg","-y","-f","concat","-safe","0",
-                    "-i",str(concat_list.resolve()),"-c:v","copy",str(ham_video)],
-                    capture_output=True,text=True,timeout=3600)
-                break
-        else:
-            subprocess.run(["cp", str(onceki), str(ham_video)])
+    concat_list = WORK/"concat.txt"
+    concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in klipler))
+    ham_video = WORK/"video_ham.mp4"
+    r = subprocess.run(["ffmpeg","-y","-f","concat","-safe","0",
+        "-i",str(concat_list.resolve()),"-c:v","copy",str(ham_video)],
+        capture_output=True,text=True,timeout=3600)
+    if r.returncode!=0 or not ham_video.exists():
+        raise Exception(f"Concat hatasi: {r.stderr[-100:]}")
 
     final_video = WORK/"final_video.mp4"
     if altyazi_srt and os.path.exists(altyazi_srt):
