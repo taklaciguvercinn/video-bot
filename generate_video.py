@@ -571,9 +571,9 @@ def main():
 
     konu=params["konu"]; muzik_hint=params["muzik_hint"]
     sure=params["sure"]; resim=params["resim"]
-    yayin_iso=params["yayin_iso"]
+    efekt_sayisi=params["efekt_sayisi"]; yayin_iso=params["yayin_iso"]
 
-    tg(f"<b>{konu}</b> | {sure} dk | {resim} gorsel\n🎵 {muzik_hint}\n📅 {yayin_iso}","📋")
+    tg(f"<b>{konu}</b> | {sure} dk | {resim} gorsel | {efekt_sayisi} efekt\n📅 {yayin_iso}","📋")
     try:
         meta        = senaryo_uret(konu, sure, resim)
         muzik       = muzik_uret(konu, sure*60, muzik_hint)
@@ -581,7 +581,7 @@ def main():
         thumbnail_uret(meta["thumbnail_prompt"],meta["thumbnail_metin"],meta["renk"],konu)
         ses,ses_sure,altyazi = ses_uret(meta["senaryo"])
         final_ses   = ses_miksle(ses, muzik, ses_sure)
-        video       = video_uret(gorseller, final_ses, altyazi, ses_sure)
+        video       = video_uret(gorseller, final_ses, altyazi, ses_sure, efekt_sayisi)
         vid_id      = youtube_yukle(video, meta, yayin_iso)
         thumbnail_yukle(vid_id, str(WORK/"thumbnail.jpg"))
         tg(f"✅ TAMAMLANDI!\nyoutube.com/watch?v={vid_id}","🎬")
