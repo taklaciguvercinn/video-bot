@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Video Bot Turkish v12.2"""
+"""Video Bot Turkish v13 - Insani yorumlar + efektler"""
 
-import sys,os,json,time,requests,subprocess,re,struct,math,hashlib
+import sys,os,json,time,requests,subprocess,re,struct,math,hashlib,random
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import quote
@@ -40,15 +40,21 @@ def tg_foto(d, c):
 
 def komut_isle(cmd):
     p = [x.strip() for x in cmd.strip().split(",")]
-    if len(p) != 6:
-        raise ValueError("Format: Konu,Muzik,Dakika,Resim,GG.AA.YYYY,SS:DD")
-    konu, muzik_hint, sure, resim, tarih, saat = p
+    if len(p) == 6:
+        konu, muzik_hint, sure, resim, tarih, saat = p
+        efekt_sayisi = 10
+    elif len(p) == 7:
+        konu, muzik_hint, sure, resim, efekt_sayisi, tarih, saat = p
+        efekt_sayisi = int(efekt_sayisi)
+    else:
+        raise ValueError("Format: Konu,Muzik,Dakika,Resim,EfektSayisi,GG.AA.YYYY,SS:DD")
     y = datetime.strptime(f"{tarih} {saat}","%d.%m.%Y %H:%M")
     return {
         "konu": konu,
         "muzik_hint": muzik_hint.strip().lower(),
         "sure": int(sure),
         "resim": int(resim),
+        "efekt_sayisi": efekt_sayisi,
         "yayin_iso": y.strftime("%Y-%m-%dT%H:%M:%S+00:00")
     }
 
@@ -170,11 +176,14 @@ Simdi {resim_sayisi} prompt uret:"""
 
 KESIN KURALLAR:
 - MUTLAKA {kelime} kelime veya daha fazla yaz.
-- SADECE anlatim metni yaz - duz akan paragraflar
-- Hicbir sahne yonergesi, kose parantez, parantez, muzik notu yazma
-- Anlatici yazma, baslik yazma, madde isareti yazma
-- {kelime} kelimeye ulasana kadar yazmayi birakma
+- Iki tarzi dogal sekilde karistir:
+  1. ANLATIM: Dramatik, akici Turkce prose
+  2. INSANI YORUM: Arada "Dusunsenize...", "Bence en ilginc olan su ki...", "Gercekten inanamiyorum ama...", "Bir dusunun, o donemde...", "Bu noktada durup dusunmek gerekiyor...", "Beni en cok etkileyen sey..." gibi insani yorumlar
+- Insani yorumlar dogal gelmeli, her 150-200 kelimede bir
+- Hicbir sahne yonergesi, kose parantez, muzik notu yazma
+- Anlatici yazma, baslik yazma
 - Apostrof kullanma, emoji kullanma
+- {kelime} kelimeye ulasana kadar yazmaya devam et
 
 Simdi basla ve {kelime}+ kelime yaz:"""
 
@@ -377,8 +386,56 @@ def ses_miksle(anlati, muzik, sure):
     tg(f"Miksaj hatasi: {r.stderr[-60:]}","⚠")
     return anlati
 
+# ─── EFEKT ENJİNİ ────────────────────────────────────────────────────────────
+def efekt_uygula(clip_path, out_path, duration, efekt_tipi, fps=30):
+    if efekt_tipi == "lightning":
+        flash_t = duration * 0.4
+        vf = (f"eq=brightness=0:saturation=1,"
+              f"geq=r='if(between(t,{flash_t:.2f},{flash_t+0.08:.2f}),min(r(X,Y)*2+180,255),r(X,Y))'"
+              f":g='if(between(t,{flash_t:.2f},{flash_t+0.08:.2f}),min(g(X,Y)*1.5+120,255),g(X,Y))'"
+              f":b='if(between(t,{flash_t:.2f},{flash_t+0.08:.2f}),min(b(X,Y)*2+200,255),b(X,Y))',"
+              f"format=yuv420p")
+    elif efekt_tipi == "glitch":
+        g_t = duration * 0.5
+        vf = (f"split[a][b];"
+              f"[a]curves=vintage[av];"
+              f"[b]hue=h=0:s=0[bv];"
+              f"[av][bv]blend=all_expr='if(between(t,{g_t:.2f},{g_t+0.12:.2f}),A,B)',"
+              f"chromashift=cbh=if(between(t\\,{g_t:.2f}\\,{g_t+0.12:.2f})\\,8\\,0)"
+              f":crh=if(between(t\\,{g_t:.2f}\\,{g_t+0.12:.2f})\\,-8\\,0),"
+              f"format=yuv420p")
+    elif efekt_tipi == "shake":
+        s_t = duration * 0.35
+        amp = 8
+        vf = (f"crop=w=iw-{amp*2}:h=ih-{amp*2}:x='{amp}+if(between(t,{s_t:.2f},{s_t+0.3:.2f}),{amp}*sin(t*80),0)'"
+              f":y='{amp}+if(between(t,{s_t:.2f},{s_t+0.3:.2f}),{amp}*cos(t*90),0)',"
+              f"scale=1920:1080,format=yuv420p")
+    elif efekt_tipi == "zoom_punch":
+        z_t = duration * 0.45
+        z_end = min(z_t + 1.5, duration - 0.3)
+        vf = (f"scale=8000:-1,"
+              f"crop=w='iw/(1.0+0.20*if(lt(t,{z_t:.2f}),0,if(lt(t,{z_t+0.08:.2f}),(t-{z_t:.2f})/0.08,if(lt(t,{z_end:.2f}),1-(t-{z_t+0.08:.2f})/({z_end:.2f}-{z_t+0.08:.2f}),0))))'"
+              f":h='ih/(1.0+0.20*if(lt(t,{z_t:.2f}),0,if(lt(t,{z_t+0.08:.2f}),(t-{z_t:.2f})/0.08,if(lt(t,{z_end:.2f}),1-(t-{z_t+0.08:.2f})/({z_end:.2f}-{z_t+0.08:.2f}),0))))'"
+              f":x='(iw-iw/(1.0+0.20*if(lt(t,{z_t:.2f}),0,if(lt(t,{z_t+0.08:.2f}),(t-{z_t:.2f})/0.08,if(lt(t,{z_end:.2f}),1-(t-{z_t+0.08:.2f})/({z_end:.2f}-{z_t+0.08:.2f}),0)))))/2'"
+              f":y='(ih-ih/(1.0+0.20*if(lt(t,{z_t:.2f}),0,if(lt(t,{z_t+0.08:.2f}),(t-{z_t:.2f})/0.08,if(lt(t,{z_end:.2f}),1-(t-{z_t+0.08:.2f})/({z_end:.2f}-{z_t+0.08:.2f}),0)))))/2',"
+              f"scale=1920:1080,format=yuv420p")
+    elif efekt_tipi == "film_reel":
+        rng2 = random.Random(int(duration*100))
+        vf = (f"noise=alls=8:allf=t,"
+              f"drawline=x=if(between(mod(t\\,4)\\,1.9\\,2.0)\\,{rng2.randint(100,1800)}\\,-1):y=0:x2=if(between(mod(t\\,4)\\,1.9\\,2.0)\\,{rng2.randint(100,1800)}\\,-1):y2=ih:color=white@0.6:t=2,"
+              f"vignette=PI/5,format=yuv420p")
+    else:
+        vf = "format=yuv420p"
+
+    r = subprocess.run(
+        ["ffmpeg","-y","-i",str(clip_path),
+         "-vf",vf,"-c:v","libx264","-preset","fast","-crf","20",
+         "-r",str(fps),"-c:a","copy",str(out_path)],
+        capture_output=True,text=True,timeout=300)
+    return r.returncode == 0 and Path(out_path).exists()
+
 # ─── VİDEO ───────────────────────────────────────────────────────────────────
-def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
+def video_uret(gorseller, ses, altyazi_srt, toplam_sure, efekt_sayisi):
     tg(f"Video uretiliyor...\n{len(gorseller)} gorsel | fade gecisler\n⏳ ~{len(gorseller)//2+5} dk","🎬")
 
     gorsel_sure = toplam_sure / len(gorseller)
