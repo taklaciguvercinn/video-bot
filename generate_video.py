@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Video Bot Turkish v12.1 - xfade kaldirildi"""
+"""Video Bot Turkish v12"""
 
 import sys,os,json,time,requests,subprocess,re,struct,math,hashlib
 from datetime import datetime
@@ -431,4 +431,192 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure):
         )
         # Her klipte mutlaka fade in + fade out
         fi = f"fade=t=in:st=0:d={fade_sure}"
-        fo = 
+        fo = f"fade=t=out:st={dur-fade_sure:.2f}:d={fade_sure}"
+        if parlama:
+            # Parlama kliplerinde renkli fade
+            fi = f"fade=t=in:st=0:d=0.5:color={p_renk}"
+            fo = f"fade=t=out:st={dur-0.5:.2f}:d=0.5:color={p_renk}"
+        else:
+            tip = gecisler[idx % len(gecisler)]
+            if tip == "dissolve": fi+=":alpha=1"; fo+=":alpha=1"
+            elif tip == "brightness": fi+=":color=black"; fo+=":color=black"
+        return f"{zoom},{fi},{fo},format=yuv420p"
+
+    klipler = []
+    for idx, gorsel in enumerate(gorseller):
+        klip    = WORK/f"clip_{idx:02d}.mp4"
+        parlama = (idx % 4 == 3)
+        p_renk  = p_renkler[(idx // 4) % len(p_renkler)]
+
+        half = max(int(gorsel_sure * fps) // 2, 1)
+        zoom = (
+            f"scale=8000:-1,"
+            f"crop="
+            f"w='iw/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half}))':"
+            f"h='ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half}))':"
+            f"x='(iw-iw/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2':"
+            f"y='(ih-ih/(1.0+0.15*if(lte(n,{half}),n/{half},(2*{half}-n)/{half})))/2',"
+            f"scale=1920:1080,vignette=PI/4,format=yuv420p"
+        )
+        # Fade YOK — xfade ile birleştirilecek, her klip tam açık başlar ve biter
+
+        r = subprocess.run(
+            ["ffmpeg","-y","-loop","1","-i",gorsel,
+             "-vf",zoom,"-t",str(gorsel_sure),
+             "-c:v","libx264","-preset","fast","-crf","20",
+             "-r",str(fps),str(klip)],
+            capture_output=True,text=True,timeout=300)
+        if r.returncode==0 and klip.exists():
+            klipler.append(str(klip))
+            icon = ("⚡🔵" if p_renk=="0x4444ff" else "⚡🔴" if p_renk=="0xff2222" else "⚡⚪") if parlama else "✓"
+            tg(f"Klip {idx+1}/{len(gorseller)} {icon}","🎞")
+        else:
+            tg(f"Klip {idx+1} hatasi: {r.stderr[-80:]}","⚠")
+
+    if not klipler: raise Exception("Hic klip olusturulamadi")
+
+    # xfade ile klipleri birleştir — smooth fade geçiş
+    tg("Klipleri xfade ile birlestiriyor...","🎬")
+    xfade_sure = fade_sure  # geçiş süresi
+    gecis_tipleri_xfade = ["fade","dissolve","fadeblack","fadegrays","smoothleft"]
+
+    if len(klipler) == 1:
+        ham_video = WORK/"video_ham.mp4"
+        subprocess.run(["cp", klipler[0], str(ham_video)])
+    else:
+        # İlk iki klibi birleştir, sonra birer birer ekle
+        gecici = WORK/"xfade_tmp.mp4"
+        ham_video = WORK/"video_ham.mp4"
+
+        onceki = klipler[0]
+        onceki_sure = gorsel_sure
+
+        for i in range(1, len(klipler)):
+            cikti = WORK/f"xfade_{i:02d}.mp4"
+            gecis = gecis_tipleri_xfade[i % len(gecis_tipleri_xfade)]
+            offset = max(onceki_sure - xfade_sure, 0.1)
+
+            # parlama klibinde renkli flash ekle
+            parlama = ((i) % 4 == 3)
+            p_renk = p_renkler[(i // 4) % len(p_renkler)]
+            if parlama:
+                gecis_str = f"xfade=transition=fade:duration={xfade_sure}:offset={offset:.3f}"
+                # flash efekti için parlama klibine overlay
+                flash_vf = (f"[0:v][1:v]{gecis_str}[xv];"
+                           f"[xv]fade=t=in:st={offset:.3f}:d=0.3:color={p_renk},"
+                           f"fade=t=out:st={offset+xfade_sure:.3f}:d=0.3:color={p_renk}[outv]")
+            else:
+                flash_vf = f"[0:v][1:v]xfade=transition={gecis}:duration={xfade_sure}:offset={offset:.3f}[outv]"
+
+            r = subprocess.run(
+                ["ffmpeg","-y","-i",str(onceki),"-i",klipler[i],
+                 "-filter_complex", flash_vf,
+                 "-map","[outv]",
+                 "-c:v","libx264","-preset","fast","-crf","20",
+                 "-r",str(fps),str(cikti)],
+                capture_output=True,text=True,timeout=600)
+
+            if r.returncode==0 and cikti.exists():
+                onceki = str(cikti)
+                onceki_sure = onceki_sure + gorsel_sure - xfade_sure
+                tg(f"Gecis {i}/{len(klipler)-1} ✓","🔗")
+            else:
+                tg(f"Gecis {i} hatasi, concat kullaniliyor...","⚠")
+                # xfade başarısız olursa basit concat
+                concat_list = WORK/"concat.txt"
+                concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in klipler))
+                subprocess.run(["ffmpeg","-y","-f","concat","-safe","0",
+                    "-i",str(concat_list.resolve()),"-c:v","copy",str(ham_video)],
+                    capture_output=True,text=True,timeout=3600)
+                break
+        else:
+            subprocess.run(["cp", str(onceki), str(ham_video)])
+
+    final_video = WORK/"final_video.mp4"
+    if altyazi_srt and os.path.exists(altyazi_srt):
+        srt_esc = str(altyazi_srt).replace('\\','/').replace(':','\\:')
+        vf_sub  = (f"subtitles={srt_esc}:force_style='"
+                   f"FontSize=14,PrimaryColour=&H00FFFF00,"
+                   f"OutlineColour=&H00000000,Outline=2,BorderStyle=1,"
+                   f"Alignment=2,MarginV=30'")
+        r = subprocess.run(["ffmpeg","-y","-i",str(ham_video),"-i",ses,
+            "-vf",vf_sub,"-c:v","libx264","-preset","fast","-crf","20",
+            "-c:a","aac","-b:a","192k","-shortest",str(final_video)],
+            capture_output=True,text=True,timeout=7200)
+    else:
+        r = subprocess.run(["ffmpeg","-y","-i",str(ham_video),"-i",ses,
+            "-c:v","copy","-c:a","aac","-b:a","192k","-shortest",str(final_video)],
+            capture_output=True,text=True,timeout=7200)
+
+    if r.returncode!=0 or not final_video.exists():
+        raise Exception(f"Final video hatasi: {r.stderr[-100:]}")
+
+    tg(f"Video hazir! {final_video.stat().st_size//(1024*1024)}MB","✅")
+    return str(final_video)
+
+# ─── YOUTUBE ─────────────────────────────────────────────────────────────────
+def erisim_tokeni_al():
+    r=requests.post("https://oauth2.googleapis.com/token",data={
+        "client_id":YOUTUBE_CLIENT_ID,"client_secret":YOUTUBE_CLIENT_SECRET,
+        "refresh_token":YOUTUBE_REFRESH_TOKEN,"grant_type":"refresh_token"},timeout=30)
+    return r.json()["access_token"]
+
+def youtube_yukle(video_yolu, meta, yayin_iso):
+    tg("YouTube'a yukleniyor...","📤")
+    token = erisim_tokeni_al()
+    body = {"snippet":{"title":meta["baslik"][:100],"description":meta["aciklama"][:5000],
+                       "tags":meta["etiketler"][:500],"categoryId":"27",
+                       "defaultLanguage":"tr","defaultAudioLanguage":"tr"},
+            "status":{"privacyStatus":"private","publishAt":yayin_iso,"selfDeclaredMadeForKids":False}}
+    r=requests.post(
+        "https://www.googleapis.com/upload/youtube/v3/videos?uploadType=resumable&part=snippet,status",
+        headers={"Authorization":f"Bearer {token}","Content-Type":"application/json",
+                 "X-Upload-Content-Type":"video/mp4"},json=body,timeout=30)
+    upload_url = r.headers.get("Location","")
+    if not upload_url: raise Exception(f"Upload URL yok: {r.text[:100]}")
+    with open(video_yolu,"rb") as f: video_data=f.read()
+    r2=requests.put(upload_url,headers={"Content-Type":"video/mp4"},data=video_data,timeout=1800)
+    if r2.status_code not in [200,201]: raise Exception(f"Yukleme hatasi: {r2.text[:100]}")
+    vid_id=r2.json().get("id","")
+    tg(f"Yuklendi! youtube.com/watch?v={vid_id}\nYayin: {yayin_iso}","🎉")
+    return vid_id
+
+def thumbnail_yukle(vid_id, thumb_yolu):
+    try:
+        token=erisim_tokeni_al()
+        with open(thumb_yolu,"rb") as f: data=f.read()
+        r=requests.post(f"https://www.googleapis.com/upload/youtube/v3/thumbnails/set?videoId={vid_id}",
+            headers={"Authorization":f"Bearer {token}","Content-Type":"image/jpeg"},
+            data=data,timeout=60)
+        if r.status_code==200: tg("Thumbnail yuklendi!","🖼")
+    except Exception as e: tg(f"Thumbnail hatasi: {e}","⚠")
+
+# ─── ANA ─────────────────────────────────────────────────────────────────────
+def main():
+    if len(sys.argv)<2: tg("Komut alinamadi","⚠"); sys.exit(1)
+    cmd=" ".join(sys.argv[1:])
+    tg(f"Komut: <b>{cmd}</b>","🚀")
+    try: params=komut_isle(cmd)
+    except Exception as e: tg(f"Komut hatasi: {e}","❌"); sys.exit(1)
+
+    konu=params["konu"]; muzik_hint=params["muzik_hint"]
+    sure=params["sure"]; resim=params["resim"]
+    yayin_iso=params["yayin_iso"]
+
+    tg(f"<b>{konu}</b> | {sure} dk | {resim} gorsel\n🎵 {muzik_hint}\n📅 {yayin_iso}","📋")
+    try:
+        meta        = senaryo_uret(konu, sure, resim)
+        muzik       = muzik_uret(konu, sure*60, muzik_hint)
+        gorseller   = gorseller_uret(meta["gorseller"], konu)
+        thumbnail_uret(meta["thumbnail_prompt"],meta["thumbnail_metin"],meta["renk"],konu)
+        ses,ses_sure,altyazi = ses_uret(meta["senaryo"])
+        final_ses   = ses_miksle(ses, muzik, ses_sure)
+        video       = video_uret(gorseller, final_ses, altyazi, ses_sure)
+        vid_id      = youtube_yukle(video, meta, yayin_iso)
+        thumbnail_yukle(vid_id, str(WORK/"thumbnail.jpg"))
+        tg(f"✅ TAMAMLANDI!\nyoutube.com/watch?v={vid_id}","🎬")
+    except Exception as e:
+        tg(f"Kritik hata: {str(e)[:200]}","❌"); sys.exit(1)
+
+if __name__=="__main__":
+    main()
