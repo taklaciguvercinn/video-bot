@@ -106,11 +106,42 @@ def json_cikart(ham):
     raise Exception(f"JSON: {ham[:60]}")
 
 def telaffuz(metin):
-    for ing,tr in [(r'\bAI\b','Ay-Ay'),(r'\bYouTube\b','Yutub'),
-                   (r'\bGoogle\b','Gugil'),(r'\bNASA\b','Nasa'),
-                   (r'\bUSA\b','ABD'),(r'\bOK\b','tamam')]:
-        metin=re.sub(ing,tr,metin,flags=re.IGNORECASE)
-    return re.sub(r' +',' ',metin).strip()
+    sozluk = [
+        # Teknoloji
+        (r'\bAI\b','Ay-Ay'), (r'\bYouTube\b','Yutub'),
+        (r'\bGoogle\b','Gugıl'), (r'\bNASA\b','Nasa'),
+        (r'\bUSA\b','ABD'), (r'\bOK\b','tamam'),
+        (r'\bDNA\b','De-En-Ay'), (r'\bRNA\b','Er-En-Ay'),
+        (r'\bNBC\b','En-Bi-Si'), (r'\bBBC\b','Bi-Bi-Si'),
+        (r'\bCIA\b','Si-Ay-Ay'), (r'\bFBI\b','Ef-Bi-Ay'),
+        (r'\bUFO\b','U-Ef-O'), (r'\bWHO\b','Dünya Sağlık Örgütü'),
+        # İngilizce kelimeler
+        (r'\bHacker\b','Heker'), (r'\bhacker\b','heker'),
+        (r'\bOnline\b','Onlayn'), (r'\bonline\b','onlayn'),
+        (r'\bServer\b','Sörvır'), (r'\bserver\b','sörvır'),
+        (r'\bSoftware\b','Softvır'), (r'\bsoftware\b','softvır'),
+        (r'\bHardware\b','Hardvır'), (r'\bhardware\b','hardvır'),
+        (r'\bInternet\b','İntörnet'), (r'\binternet\b','intörnet'),
+        (r'\bWebsite\b','Vebsayt'), (r'\bwebsite\b','vebsayt'),
+        (r'\bPassword\b','Passvord'), (r'\bpassword\b','passvord'),
+        (r'\bEmail\b','İmeyl'), (r'\bemail\b','imeyl'),
+        (r'\bComputer\b','Kompyutur'), (r'\bcomputer\b','kompyutur'),
+        # İsimler
+        (r'\bDavid\b','Deyvid'), (r'\bMichael\b','Maykıl'),
+        (r'\bJames\b','Ceymz'), (r'\bRobert\b','Robırt'),
+        (r'\bWilliam\b','Vilyım'), (r'\bCharles\b','Çarlz'),
+        (r'\bGeorge\b','Corc'), (r'\bJohn\b','Con'),
+        (r'\bHahn\b','Han'), (r'\bSteve\b','Stiv'),
+        (r'\bMark\b','Mark'), (r'\bBill\b','Bil'),
+        (r'\bElon\b','İlon'), (r'\bJeff\b','Cef'),
+        # Yerler
+        (r'\bNew York\b','Nyu York'), (r'\bLos Angeles\b','Los Anceles'),
+        (r'\bWashington\b','Vaşington'), (r'\bChicago\b','Şikago'),
+        (r'\bLondon\b','Londra'), (r'\bParis\b','Paris'),
+    ]
+    for ing,tr in sozluk:
+        metin = re.sub(ing, tr, metin, flags=re.IGNORECASE)
+    return re.sub(r' +', ' ', metin).strip()
 
 # ─── İÇERİK ──────────────────────────────────────────────────────────────────
 def senaryo_uret(konu, sure, resim_sayisi):
@@ -503,12 +534,26 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure, efekt_sayisi):
 
     if not klipler: raise Exception("Hic klip olusturulamadi")
 
+    # Tüm klipleri aynı codec'e getir
+    tg("Klipler birlestiriliyor...","🎬")
+    norm_klipler = []
+    for i, k in enumerate(klipler):
+        norm = WORK/f"norm_{i:02d}.mp4"
+        r = subprocess.run(
+            ["ffmpeg","-y","-i",k,
+             "-c:v","libx264","-preset","fast","-crf","20",
+             "-r",str(fps),"-vf","scale=1920:1080",str(norm)],
+            capture_output=True,text=True,timeout=300)
+        if r.returncode==0 and norm.exists():
+            norm_klipler.append(str(norm))
+        else:
+            norm_klipler.append(k)
+
     concat_list = WORK/"concat.txt"
-    concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in klipler))
+    concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in norm_klipler))
     ham_video = WORK/"video_ham.mp4"
     r = subprocess.run(["ffmpeg","-y","-f","concat","-safe","0",
-        "-i",str(concat_list.resolve()),"-c:v","copy",str(ham_video)],
-        capture_output=True,text=True,timeout=3600)
+        "-i",str(concat_list.resolve()),"-c:v","copy",str(ham_video)],        capture_output=True,text=True,timeout=3600)
     if r.returncode!=0 or not ham_video.exists():
         raise Exception(f"Concat hatasi: {r.stderr[-100:]}")
 
