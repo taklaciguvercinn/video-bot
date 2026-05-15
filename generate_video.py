@@ -388,60 +388,70 @@ def ses_miksle(anlati, muzik, sure):
 
 # ─── EFEKT ENJİNİ ────────────────────────────────────────────────────────────
 def efekt_uygula(clip_path, out_path, duration, efekt_tipi, fps=30):
-    if efekt_tipi == "lightning":
-        flash_t = duration * 0.4
-        vf = (f"eq=brightness=0:saturation=1,"
-              f"geq=r='if(between(t,{flash_t:.2f},{flash_t+0.08:.2f}),min(r(X,Y)*2+180,255),r(X,Y))'"
-              f":g='if(between(t,{flash_t:.2f},{flash_t+0.08:.2f}),min(g(X,Y)*1.5+120,255),g(X,Y))'"
-              f":b='if(between(t,{flash_t:.2f},{flash_t+0.08:.2f}),min(b(X,Y)*2+200,255),b(X,Y))',"
-              f"format=yuv420p")
-    elif efekt_tipi == "glitch":
-        g_t = duration * 0.5
-        vf = (f"split[a][b];"
-              f"[a]curves=vintage[av];"
-              f"[b]hue=h=0:s=0[bv];"
-              f"[av][bv]blend=all_expr='if(between(t,{g_t:.2f},{g_t+0.12:.2f}),A,B)',"
-              f"chromashift=cbh=if(between(t\\,{g_t:.2f}\\,{g_t+0.12:.2f})\\,8\\,0)"
-              f":crh=if(between(t\\,{g_t:.2f}\\,{g_t+0.12:.2f})\\,-8\\,0),"
-              f"format=yuv420p")
-    elif efekt_tipi == "shake":
-        s_t = duration * 0.35
-        amp = 8
-        vf = (f"crop=w=iw-{amp*2}:h=ih-{amp*2}:x='{amp}+if(between(t,{s_t:.2f},{s_t+0.3:.2f}),{amp}*sin(t*80),0)'"
-              f":y='{amp}+if(between(t,{s_t:.2f},{s_t+0.3:.2f}),{amp}*cos(t*90),0)',"
-              f"scale=1920:1080,format=yuv420p")
-    elif efekt_tipi == "zoom_punch":
-        z_t = duration * 0.45
-        z_end = min(z_t + 1.5, duration - 0.3)
-        vf = (f"scale=8000:-1,"
-              f"crop=w='iw/(1.0+0.20*if(lt(t,{z_t:.2f}),0,if(lt(t,{z_t+0.08:.2f}),(t-{z_t:.2f})/0.08,if(lt(t,{z_end:.2f}),1-(t-{z_t+0.08:.2f})/({z_end:.2f}-{z_t+0.08:.2f}),0))))'"
-              f":h='ih/(1.0+0.20*if(lt(t,{z_t:.2f}),0,if(lt(t,{z_t+0.08:.2f}),(t-{z_t:.2f})/0.08,if(lt(t,{z_end:.2f}),1-(t-{z_t+0.08:.2f})/({z_end:.2f}-{z_t+0.08:.2f}),0))))'"
-              f":x='(iw-iw/(1.0+0.20*if(lt(t,{z_t:.2f}),0,if(lt(t,{z_t+0.08:.2f}),(t-{z_t:.2f})/0.08,if(lt(t,{z_end:.2f}),1-(t-{z_t+0.08:.2f})/({z_end:.2f}-{z_t+0.08:.2f}),0)))))/2'"
-              f":y='(ih-ih/(1.0+0.20*if(lt(t,{z_t:.2f}),0,if(lt(t,{z_t+0.08:.2f}),(t-{z_t:.2f})/0.08,if(lt(t,{z_end:.2f}),1-(t-{z_t+0.08:.2f})/({z_end:.2f}-{z_t+0.08:.2f}),0)))))/2',"
-              f"scale=1920:1080,format=yuv420p")
-    elif efekt_tipi == "film_reel":
-        rng2 = random.Random(int(duration*100))
-        vf = (f"noise=alls=8:allf=t,"
-              f"drawline=x=if(between(mod(t\\,4)\\,1.9\\,2.0)\\,{rng2.randint(100,1800)}\\,-1):y=0:x2=if(between(mod(t\\,4)\\,1.9\\,2.0)\\,{rng2.randint(100,1800)}\\,-1):y2=ih:color=white@0.6:t=2,"
-              f"vignette=PI/5,format=yuv420p")
-    else:
-        vf = "format=yuv420p"
+    inp = str(clip_path)
+    out = str(out_path)
+    t1  = round(duration * 0.35, 2)
+    t2  = round(duration * 0.65, 2)
 
-    r = subprocess.run(
-        ["ffmpeg","-y","-i",str(clip_path),
-         "-vf",vf,"-c:v","libx264","-preset","fast","-crf","20",
-         "-r",str(fps),"-c:a","copy",str(out_path)],
-        capture_output=True,text=True,timeout=300)
-    return r.returncode == 0 and Path(out_path).exists()
+    if efekt_tipi == "lightning":
+        cmd = ["ffmpeg","-y","-i",inp,
+               "-vf",f"fade=t=in:st={t1}:d=0.05:color=white,fade=t=out:st={t1+0.05}:d=0.1",
+               "-c:v","libx264","-preset","fast","-crf","20","-r",str(fps),out]
+
+    elif efekt_tipi == "glitch":
+        cmd = ["ffmpeg","-y","-i",inp,
+               "-vf",(f"split=2[a][b];"
+                      f"[a]trim=0:{t1},setpts=PTS-STARTPTS[p1];"
+                      f"[b]trim={t1}:{t1+0.15},setpts=PTS-STARTPTS,"
+                      f"hue=h=120:s=3,eq=contrast=2[p2];"
+                      f"[p1][p2]concat=n=2:v=1:a=0,format=yuv420p"),
+               "-c:v","libx264","-preset","fast","-crf","20","-r",str(fps),"-t",str(duration),out]
+
+    elif efekt_tipi == "shake":
+        cmd = ["ffmpeg","-y","-i",inp,
+               "-vf","crop=1900:1060:10:10,scale=1920:1080,format=yuv420p",
+               "-c:v","libx264","-preset","fast","-crf","20","-r",str(fps),out]
+
+    elif efekt_tipi == "zoom_punch":
+        cmd = ["ffmpeg","-y","-i",inp,
+               "-vf",(f"scale=8000:-1,"
+                      f"zoompan=z='if(between(t,{t1},{t1+0.08}),1.0+(t-{t1})*2.5,if(between(t,{t1+0.08},{t2}),1.2-((t-{t1+0.08})/({t2}-{t1+0.08}))*0.2,1.0))':"
+                      f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
+                      f"d=1:s=1920x1080:fps={fps},"
+                      f"format=yuv420p"),
+               "-c:v","libx264","-preset","fast","-crf","20","-r",str(fps),"-t",str(duration),out]
+
+    elif efekt_tipi == "film_reel":
+        cmd = ["ffmpeg","-y","-i",inp,
+               "-vf","noise=alls=12:allf=t,vignette=PI/3,eq=contrast=1.1:brightness=-0.05,format=yuv420p",
+               "-c:v","libx264","-preset","fast","-crf","20","-r",str(fps),out]
+    else:
+        return False
+
+    r = subprocess.run(cmd, capture_output=True, text=True, timeout=300)
+    if r.returncode != 0:
+        tg(f"Efekt {efekt_tipi} hatasi: {r.stderr[-60:]}","⚠")
+        return False
+    return Path(out_path).exists() and Path(out_path).stat().st_size > 1000
 
 # ─── VİDEO ───────────────────────────────────────────────────────────────────
 def video_uret(gorseller, ses, altyazi_srt, toplam_sure, efekt_sayisi):
-    tg(f"Video uretiliyor...\n{len(gorseller)} gorsel | fade gecisler\n⏳ ~{len(gorseller)//2+5} dk","🎬")
+    tg(f"Video uretiliyor...\n{len(gorseller)} gorsel | {efekt_sayisi} efekt","🎬")
 
     gorsel_sure = toplam_sure / len(gorseller)
     fps         = 30
     fade_sure   = 0.5
     p_renkler   = ["white","0x4444ff","0xff2222"]
+    efekt_tipleri = ["lightning","glitch","shake","zoom_punch","film_reel"]
+
+    rng = random.Random(int(hashlib.md5(str(len(gorseller)).encode()).hexdigest()[:8],16))
+    efekt_klipleri = {}
+    if efekt_sayisi > 0:
+        secilecek = min(efekt_sayisi, len(gorseller))
+        secilen_idx = rng.sample(range(len(gorseller)), secilecek)
+        for i, idx in enumerate(secilen_idx):
+            efekt_klipleri[idx] = efekt_tipleri[i % len(efekt_tipleri)]
+    tg(f"{len(efekt_klipleri)} klibe efekt atandi","⚡")
 
     klipler = []
     for idx, gorsel in enumerate(gorseller):
