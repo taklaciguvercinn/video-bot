@@ -41,8 +41,8 @@ def tg_foto(d, c):
 def komut_isle(cmd):
     p = [x.strip() for x in cmd.strip().split(",")]
     if len(p) == 6:
-        konu, sure, resim, tarih, saat = p
-        efekt_sayisi = 10; muzik_hint = ""
+        konu, muzik_hint, sure, resim, tarih, saat = p
+        efekt_sayisi = 10
     elif len(p) == 7:
         konu, muzik_hint, sure, resim, efekt_sayisi, tarih, saat = p
         efekt_sayisi = int(efekt_sayisi)
