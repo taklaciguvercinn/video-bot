@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Video Bot Turkish v13 - Insani yorumlar + efektler"""
+"""Video Bot Turkish v13"""
 
 import sys,os,json,time,requests,subprocess,re,struct,math,hashlib,random
 from datetime import datetime
@@ -107,37 +107,20 @@ def json_cikart(ham):
 
 def telaffuz(metin):
     sozluk = [
-        # Teknoloji
-        (r'\bAI\b','Ay-Ay'), (r'\bYouTube\b','Yutub'),
-        (r'\bGoogle\b','Gugıl'), (r'\bNASA\b','Nasa'),
-        (r'\bUSA\b','ABD'), (r'\bOK\b','tamam'),
-        (r'\bDNA\b','De-En-Ay'), (r'\bRNA\b','Er-En-Ay'),
-        (r'\bNBC\b','En-Bi-Si'), (r'\bBBC\b','Bi-Bi-Si'),
-        (r'\bCIA\b','Si-Ay-Ay'), (r'\bFBI\b','Ef-Bi-Ay'),
-        (r'\bUFO\b','U-Ef-O'), (r'\bWHO\b','Dünya Sağlık Örgütü'),
-        # İngilizce kelimeler
-        (r'\bHacker\b','Heker'), (r'\bhacker\b','heker'),
-        (r'\bOnline\b','Onlayn'), (r'\bonline\b','onlayn'),
-        (r'\bServer\b','Sörvır'), (r'\bserver\b','sörvır'),
-        (r'\bSoftware\b','Softvır'), (r'\bsoftware\b','softvır'),
-        (r'\bHardware\b','Hardvır'), (r'\bhardware\b','hardvır'),
-        (r'\bInternet\b','İntörnet'), (r'\binternet\b','intörnet'),
-        (r'\bWebsite\b','Vebsayt'), (r'\bwebsite\b','vebsayt'),
-        (r'\bPassword\b','Passvord'), (r'\bpassword\b','passvord'),
-        (r'\bEmail\b','İmeyl'), (r'\bemail\b','imeyl'),
-        (r'\bComputer\b','Kompyutur'), (r'\bcomputer\b','kompyutur'),
-        # İsimler
-        (r'\bDavid\b','Deyvid'), (r'\bMichael\b','Maykıl'),
-        (r'\bJames\b','Ceymz'), (r'\bRobert\b','Robırt'),
-        (r'\bWilliam\b','Vilyım'), (r'\bCharles\b','Çarlz'),
-        (r'\bGeorge\b','Corc'), (r'\bJohn\b','Con'),
-        (r'\bHahn\b','Han'), (r'\bSteve\b','Stiv'),
-        (r'\bMark\b','Mark'), (r'\bBill\b','Bil'),
-        (r'\bElon\b','İlon'), (r'\bJeff\b','Cef'),
-        # Yerler
-        (r'\bNew York\b','Nyu York'), (r'\bLos Angeles\b','Los Anceles'),
-        (r'\bWashington\b','Vaşington'), (r'\bChicago\b','Şikago'),
-        (r'\bLondon\b','Londra'), (r'\bParis\b','Paris'),
+        (r'\bAI\b','Ay-Ay'),(r'\bYouTube\b','Yutub'),
+        (r'\bGoogle\b','Gugil'),(r'\bNASA\b','Nasa'),
+        (r'\bUSA\b','ABD'),(r'\bOK\b','tamam'),
+        (r'\bDNA\b','De-En-Ay'),(r'\bRNA\b','Er-En-Ay'),
+        (r'\bCIA\b','Si-Ay-Ay'),(r'\bFBI\b','Ef-Bi-Ay'),
+        (r'\bUFO\b','U-Ef-O'),
+        (r'\bHacker\b','Heker'),(r'\bhacker\b','heker'),
+        (r'\bOnline\b','Onlayn'),(r'\bonline\b','onlayn'),
+        (r'\bDavid\b','Deyvid'),(r'\bMichael\b','Maykil'),
+        (r'\bJames\b','Ceymz'),(r'\bGeorge\b','Corc'),
+        (r'\bJohn\b','Con'),(r'\bHahn\b','Han'),
+        (r'\bNew York\b','Nyu York'),
+        (r'\bWashington\b','Vasington'),
+        (r'\bLondon\b','Londra'),
     ]
     for ing,tr in sozluk:
         metin = re.sub(ing, tr, metin, flags=re.IGNORECASE)
@@ -152,7 +135,6 @@ def senaryo_uret(konu, sure, resim_sayisi):
     gorseller = []
     try:
         p_img = f"""Sen bir gorsel sanatcisin. {konu} hakkinda bir belgesel icin tam olarak {resim_sayisi} adet benzersiz gorsel promptu uret.
-
 KURALLAR:
 - Her prompt {konu} ile dogrudan ilgili olmali
 - Gorsellerde KESINLIKLE insan, yuz, yazi olmasin
@@ -160,24 +142,20 @@ KURALLAR:
 - Her prompt INGILIZCE olsun
 - Her prompt yeni satirda, 1 den {resim_sayisi} e kadar numarali
 - Her prompt 100 karakterden kisa olsun
-
 Simdi {resim_sayisi} prompt uret:"""
         raw, _ = gemini(p_img, max_tokens=2048)
-        lines = [l.strip() for l in raw.split('\n') if l.strip()]
-        for line in lines:
-            line = re.sub(r'^\d+[\.\)]\s*','',line).strip()
+        for line in raw.split('\n'):
+            line = re.sub(r'^\d+[\.\)]\s*','',line.strip())
             if len(line) > 10:
-                line += ", no people, no humans, cinematic dramatic lighting 8k"
-                gorseller.append(line)
-            if len(gorseller) >= resim_sayisi:
-                break
+                gorseller.append(line + ", no people, no humans, cinematic dramatic lighting 8k")
+            if len(gorseller) >= resim_sayisi: break
         tg(f"{len(gorseller)} gorsel promptu hazir","✅")
     except Exception as e:
         tg(f"Gorsel prompt hatasi: {e}","⚠")
 
     while len(gorseller) < resim_sayisi:
         i = len(gorseller)
-        gorseller.append(f"{konu} cinematic dramatic scene {i+1}, no people, 8k atmospheric lighting")
+        gorseller.append(f"{konu} cinematic dramatic scene {i+1}, no people, 8k")
 
     meta = {
         "baslik": f"{konu}: Tarihin Gizli Sirri!",
@@ -209,7 +187,7 @@ KESIN KURALLAR:
 - MUTLAKA {kelime} kelime veya daha fazla yaz.
 - Iki tarzi dogal sekilde karistir:
   1. ANLATIM: Dramatik, akici Turkce prose
-  2. INSANI YORUM: Arada "Dusunsenize...", "Bence en ilginc olan su ki...", "Gercekten inanamiyorum ama...", "Bir dusunun, o donemde...", "Bu noktada durup dusunmek gerekiyor...", "Beni en cok etkileyen sey..." gibi insani yorumlar
+  2. INSANI YORUM: Arada "Dusunsenize...", "Bence en ilginc olan su ki...", "Gercekten inanamiyorum ama...", "Bir dusunun, o donemde...", "Bu noktada durup dusunmek gerekiyor..." gibi insani yorumlar
 - Insani yorumlar dogal gelmeli, her 150-200 kelimede bir
 - Hicbir sahne yonergesi, kose parantez, muzik notu yazma
 - Anlatici yazma, baslik yazma
@@ -258,14 +236,14 @@ def muzik_uret(konu, sure_sn, muzik_hint=""):
         hc = clean(muzik_hint)
         for mp3 in all_mp3:
             if hc in clean(mp3.name): chosen = mp3; break
-        if not chosen: tg(f"Hint '{muzik_hint}' bulunamadi, kategori kullaniliyor...","⚠")
+        if not chosen: tg(f"Hint bulunamadi, kategori kullaniliyor...","⚠")
 
     if not chosen:
         k = konu.lower()
         for c,r in [("ş","s"),("ğ","g"),("ı","i"),("ö","o"),("ü","u"),("ç","c")]: k=k.replace(c,r)
         cat = None
-        if any(x in k for x in ["savas","viking","osmanli","roma","tarih","cin","mogol","napoleon","hitler","askeri"]): cat="war"
-        elif any(x in k for x in ["misir","antik","yunan","sumer","babil","mezopotamya","gemi","kayip","gizemli"]): cat="mystery"
+        if any(x in k for x in ["savas","viking","osmanli","roma","tarih","cin","mogol","napoleon","hitler"]): cat="war"
+        elif any(x in k for x in ["misir","antik","yunan","sumer","babil","gemi","kayip","gizemli"]): cat="mystery"
         elif any(x in k for x in ["uzay","yapay","teknoloji","bilim","robot","gelecek"]): cat="space"
         elif any(x in k for x in ["doga","hayvan","deniz","orman","okyanus"]): cat="nature"
         elif any(x in k for x in ["gizem","korku","paranormal","komplo","karanlik"]): cat="mystery"
@@ -406,7 +384,7 @@ def ses_miksle(anlati, muzik, sure):
     cmd=["ffmpeg","-y","-i",anlati,"-stream_loop","-1","-i",str(mp),
          "-filter_complex",
          "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
-         "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.12[a2];"
+         "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.10[a2];"
          "[a1][a2]amix=inputs=2:duration=first:weights=1 0.6[aout]",
          "-map","[aout]","-c:a","libmp3lame","-b:a","192k",
          "-t",str(int(sure)+2),str(miksl)]
@@ -417,7 +395,7 @@ def ses_miksle(anlati, muzik, sure):
     tg(f"Miksaj hatasi: {r.stderr[-60:]}","⚠")
     return anlati
 
-# ─── EFEKT ENJİNİ ────────────────────────────────────────────────────────────
+# ─── EFEKT ───────────────────────────────────────────────────────────────────
 def efekt_uygula(clip_path, out_path, duration, efekt_tipi, fps=30):
     inp = str(clip_path)
     out = str(out_path)
@@ -428,7 +406,6 @@ def efekt_uygula(clip_path, out_path, duration, efekt_tipi, fps=30):
         cmd = ["ffmpeg","-y","-i",inp,
                "-vf",f"fade=t=in:st={t1}:d=0.05:color=white,fade=t=out:st={t1+0.05}:d=0.1",
                "-c:v","libx264","-preset","fast","-crf","20","-r",str(fps),out]
-
     elif efekt_tipi == "glitch":
         cmd = ["ffmpeg","-y","-i",inp,
                "-vf",(f"split=2[a][b];"
@@ -437,21 +414,18 @@ def efekt_uygula(clip_path, out_path, duration, efekt_tipi, fps=30):
                       f"hue=h=120:s=3,eq=contrast=2[p2];"
                       f"[p1][p2]concat=n=2:v=1:a=0,format=yuv420p"),
                "-c:v","libx264","-preset","fast","-crf","20","-r",str(fps),"-t",str(duration),out]
-
     elif efekt_tipi == "shake":
         cmd = ["ffmpeg","-y","-i",inp,
                "-vf","crop=1900:1060:10:10,scale=1920:1080,format=yuv420p",
                "-c:v","libx264","-preset","fast","-crf","20","-r",str(fps),out]
-
     elif efekt_tipi == "zoom_punch":
         cmd = ["ffmpeg","-y","-i",inp,
                "-vf",(f"scale=8000:-1,"
-                      f"zoompan=z='if(between(t,{t1},{t1+0.08}),1.0+(t-{t1})*2.5,if(between(t,{t1+0.08},{t2}),1.2-((t-{t1+0.08})/({t2}-{t1+0.08}))*0.2,1.0))':"
+                      f"zoompan=z='if(between(t,{t1},{t1+0.08}),1.0+(t-{t1})*2.5,"
+                      f"if(between(t,{t1+0.08},{t2}),1.2-((t-{t1+0.08})/({t2}-{t1+0.08}))*0.2,1.0))':"
                       f"x='iw/2-(iw/zoom/2)':y='ih/2-(ih/zoom/2)':"
-                      f"d=1:s=1920x1080:fps={fps},"
-                      f"format=yuv420p"),
+                      f"d=1:s=1920x1080:fps={fps},format=yuv420p"),
                "-c:v","libx264","-preset","fast","-crf","20","-r",str(fps),"-t",str(duration),out]
-
     elif efekt_tipi == "film_reel":
         cmd = ["ffmpeg","-y","-i",inp,
                "-vf","noise=alls=12:allf=t,vignette=PI/3,eq=contrast=1.1:brightness=-0.05,format=yuv420p",
@@ -502,22 +476,11 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure, efekt_sayisi):
         )
 
         if parlama:
-            vf = (f"{zoom},"
-                  f"fade=t=in:st=0:d=0.4:color={p_renk},"
-                  f"fade=t=out:st={gorsel_sure-0.4:.2f}:d=0.4:color={p_renk},"
-                  f"format=yuv420p")
+            vf = f"{zoom},fade=t=in:st=0:d=0.4:color={p_renk},fade=t=out:st={gorsel_sure-0.4:.2f}:d=0.4:color={p_renk},format=yuv420p"
         elif idx % 3 == 1:
-            # Siyahtan acilip siyaha kapan
-            vf = (f"{zoom},"
-                  f"fade=t=in:st=0:d={fade_sure}:color=black,"
-                  f"fade=t=out:st={gorsel_sure-fade_sure:.2f}:d={fade_sure}:color=black,"
-                  f"format=yuv420p")
+            vf = f"{zoom},fade=t=in:st=0:d={fade_sure}:color=black,fade=t=out:st={gorsel_sure-fade_sure:.2f}:d={fade_sure}:color=black,format=yuv420p"
         else:
-            # Normal fade
-            vf = (f"{zoom},"
-                  f"fade=t=in:st=0:d={fade_sure},"
-                  f"fade=t=out:st={gorsel_sure-fade_sure:.2f}:d={fade_sure},"
-                  f"format=yuv420p")
+            vf = f"{zoom},fade=t=in:st=0:d={fade_sure},fade=t=out:st={gorsel_sure-fade_sure:.2f}:d={fade_sure},format=yuv420p"
 
         r = subprocess.run(
             ["ffmpeg","-y","-loop","1","-i",gorsel,
@@ -525,17 +488,27 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure, efekt_sayisi):
              "-c:v","libx264","-preset","fast","-crf","20",
              "-r",str(fps),str(klip)],
             capture_output=True,text=True,timeout=300)
+
         if r.returncode==0 and klip.exists():
-            klipler.append(str(klip))
-            icon = ("⚡🔵" if p_renk=="0x4444ff" else "⚡🔴" if p_renk=="0xff2222" else "⚡⚪") if parlama else "✓"
-            tg(f"Klip {idx+1}/{len(gorseller)} {icon}","🎞")
+            if idx in efekt_klipleri:
+                efekt_out = WORK/f"clip_{idx:02d}_fx.mp4"
+                efekt_tip = efekt_klipleri[idx]
+                ok = efekt_uygula(str(klip), str(efekt_out), gorsel_sure, efekt_tip, fps)
+                if ok:
+                    klipler.append(str(efekt_out))
+                    tg(f"Klip {idx+1}/{len(gorseller)} ✓ +{efekt_tip}","⚡")
+                else:
+                    klipler.append(str(klip))
+                    tg(f"Klip {idx+1}/{len(gorseller)} ✓ (efekt atildi)","🎞")
+            else:
+                klipler.append(str(klip))
+                tg(f"Klip {idx+1}/{len(gorseller)} ✓","🎞")
         else:
             tg(f"Klip {idx+1} hatasi: {r.stderr[-80:]}","⚠")
 
     if not klipler: raise Exception("Hic klip olusturulamadi")
 
-    # Tüm klipleri aynı codec'e getir
-    tg("Klipler birlestiriliyor...","🎬")
+    tg("Klipler normalize ediliyor...","🎬")
     norm_klipler = []
     for i, k in enumerate(klipler):
         norm = WORK/f"norm_{i:02d}.mp4"
@@ -544,16 +517,14 @@ def video_uret(gorseller, ses, altyazi_srt, toplam_sure, efekt_sayisi):
              "-c:v","libx264","-preset","fast","-crf","20",
              "-r",str(fps),"-vf","scale=1920:1080",str(norm)],
             capture_output=True,text=True,timeout=300)
-        if r.returncode==0 and norm.exists():
-            norm_klipler.append(str(norm))
-        else:
-            norm_klipler.append(k)
+        norm_klipler.append(str(norm) if r.returncode==0 and norm.exists() else k)
 
     concat_list = WORK/"concat.txt"
     concat_list.write_text('\n'.join(f"file '{Path(c).resolve()}'" for c in norm_klipler))
     ham_video = WORK/"video_ham.mp4"
     r = subprocess.run(["ffmpeg","-y","-f","concat","-safe","0",
-        "-i",str(concat_list.resolve()),"-c:v","copy",str(ham_video)],        capture_output=True,text=True,timeout=3600)
+        "-i",str(concat_list.resolve()),"-c:v","copy",str(ham_video)],
+        capture_output=True,text=True,timeout=3600)
     if r.returncode!=0 or not ham_video.exists():
         raise Exception(f"Concat hatasi: {r.stderr[-100:]}")
 
@@ -624,7 +595,7 @@ def main():
     try: params=komut_isle(cmd)
     except Exception as e: tg(f"Komut hatasi: {e}","❌"); sys.exit(1)
 
-    konu=params["konu"]
+    konu=params["konu"]; muzik_hint=params["muzik_hint"]
     sure=params["sure"]; resim=params["resim"]
     efekt_sayisi=params["efekt_sayisi"]; yayin_iso=params["yayin_iso"]
 
@@ -633,8 +604,10 @@ def main():
         meta        = senaryo_uret(konu, sure, resim)
         muzik       = muzik_uret(konu, sure*60, muzik_hint)
         gorseller   = gorseller_uret(meta["gorseller"], konu)
+        thumbnail_uret(meta["thumbnail_prompt"],meta["thumbnail_metin"],meta["renk"],konu)
         ses,ses_sure,altyazi = ses_uret(meta["senaryo"])
-        video       = video_uret(gorseller, ses, altyazi, ses_sure, efekt_sayisi)
+        final_ses   = ses_miksle(ses, muzik, ses_sure)
+        video       = video_uret(gorseller, final_ses, altyazi, ses_sure, efekt_sayisi)
         vid_id      = youtube_yukle(video, meta, yayin_iso)
         thumbnail_yukle(vid_id, str(WORK/"thumbnail.jpg"))
         tg(f"✅ TAMAMLANDI!\nyoutube.com/watch?v={vid_id}","🎬")
