@@ -41,8 +41,8 @@ def tg_foto(d, c):
 def komut_isle(cmd):
     p = [x.strip() for x in cmd.strip().split(",")]
     if len(p) == 6:
-        konu, muzik_hint, sure, resim, tarih, saat = p
-        efekt_sayisi = 10
+        konu, sure, resim, tarih, saat = p
+        efekt_sayisi = 10; muzik_hint = ""
     elif len(p) == 7:
         konu, muzik_hint, sure, resim, efekt_sayisi, tarih, saat = p
         efekt_sayisi = int(efekt_sayisi)
@@ -406,7 +406,7 @@ def ses_miksle(anlati, muzik, sure):
     cmd=["ffmpeg","-y","-i",anlati,"-stream_loop","-1","-i",str(mp),
          "-filter_complex",
          "[0:a]aformat=sample_rates=44100:channel_layouts=stereo[a1];"
-         "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.20[a2];"
+         "[1:a]aformat=sample_rates=44100:channel_layouts=stereo,volume=0.12[a2];"
          "[a1][a2]amix=inputs=2:duration=first:weights=1 0.6[aout]",
          "-map","[aout]","-c:a","libmp3lame","-b:a","192k",
          "-t",str(int(sure)+2),str(miksl)]
@@ -624,7 +624,7 @@ def main():
     try: params=komut_isle(cmd)
     except Exception as e: tg(f"Komut hatasi: {e}","❌"); sys.exit(1)
 
-    konu=params["konu"]; muzik_hint=params["muzik_hint"]
+    konu=params["konu"]
     sure=params["sure"]; resim=params["resim"]
     efekt_sayisi=params["efekt_sayisi"]; yayin_iso=params["yayin_iso"]
 
@@ -633,10 +633,8 @@ def main():
         meta        = senaryo_uret(konu, sure, resim)
         muzik       = muzik_uret(konu, sure*60, muzik_hint)
         gorseller   = gorseller_uret(meta["gorseller"], konu)
-        thumbnail_uret(meta["thumbnail_prompt"],meta["thumbnail_metin"],meta["renk"],konu)
         ses,ses_sure,altyazi = ses_uret(meta["senaryo"])
-        final_ses   = ses_miksle(ses, muzik, ses_sure)
-        video       = video_uret(gorseller, final_ses, altyazi, ses_sure, efekt_sayisi)
+        video       = video_uret(gorseller, ses, altyazi, ses_sure, efekt_sayisi)
         vid_id      = youtube_yukle(video, meta, yayin_iso)
         thumbnail_yukle(vid_id, str(WORK/"thumbnail.jpg"))
         tg(f"✅ TAMAMLANDI!\nyoutube.com/watch?v={vid_id}","🎬")
